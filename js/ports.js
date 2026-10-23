@@ -341,6 +341,7 @@
         ripple: (qMax - qMin) / qMean,
         pMaxBar: pMax / 1e5, pMinBar: pMin / 1e5, voidMax: vfMax,
         leak: sim.leakMean,
+        outlet: p.dp > 0 ? G.outletRipple(p, res, sim) : null,
       });
       if (p.leakOn) {
         const lossPct = 100 * (1 - qMean / qTheo);

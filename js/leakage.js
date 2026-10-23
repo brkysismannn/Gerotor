@@ -188,5 +188,52 @@
     });
   }
 
-  Object.assign(G, { simulateNetwork, tipConductance, sectorConductance, slotConductance, contactRhoEq });
+  /*
+   * Outlet pressure ripple: the delivered flow Q(t) of the network (computed at constant p_D) feeds
+   * an outlet volume V_out and a load restriction sized for the mean flow at the target Δp
+   * (as the GT-SUITE "OutletRestriction"):
+   *   V_out/K · dp/dt = Q(t) − Cd·A_r·sqrt(2(p − p_in)/ρ),   A_r = Q̄ / (Cd·sqrt(2Δp/ρ))
+   * One-way coupling (the ripple does not feed back on the chamber flows). V_out = 0 gives the
+   * purely resistive limit p = p_in + ρ/2·(Q/(Cd·A_r))².
+   */
+  function outletRipple(p, res, sim) {
+    const { M, dt } = res, N = p.N;
+    const w2 = p.rpm * TAU / 60 * (N - 1) / N, T = dt / w2;            // time per grid step
+    const K = p.bulk * 1e6, rho = p.rho, Cd = p.Cd, pS = sim.pS, dP = sim.pD - sim.pS;
+    const Q = sim.Qout;
+    let qm = 0;
+    for (let j = 0; j < M; j++) qm += Q[j];
+    qm /= M;
+    if (!(qm > 0) || !(dP > 0)) return null;
+    const Ar = qm / (Cd * Math.sqrt(2 * dP / rho));
+    const Qr = x => Cd * Ar * Math.sign(x - pS) * Math.sqrt(2 * Math.abs(x - pS) / rho);
+    const C = Math.max(0, p.outletVol || 0) * 1e-6 / K;                // compliance [m³/Pa]
+    const PD = new Float64Array(M);
+    if (C === 0) {
+      for (let j = 0; j < M; j++) PD[j] = pS + rho / 2 * (Math.max(Q[j], 0) / (Cd * Ar)) ** 2;
+    } else {
+      const sub = 8, h = T / sub;
+      let x = sim.pD;
+      for (let cycle = 0; cycle < 4; cycle++) {
+        for (let j = 0; j < M; j++) {
+          for (let s = 0; s < sub; s++) {
+            const q = Q[j], x0 = x;
+            // Implicit Euler: C(x − x0)/h + Qr(x) − q = 0 (monotonic in x).
+            let lo = Math.min(x0, pS) - 1e7, hi = Math.max(x0, sim.pD) * 2 + 1e7;
+            for (let it = 0; it < 60; it++) {
+              const m = 0.5 * (lo + hi);
+              if (C * (m - x0) / h + Qr(m) - q > 0) hi = m; else lo = m;
+            }
+            x = 0.5 * (lo + hi);
+          }
+          PD[j] = x;
+        }
+      }
+    }
+    let mn = Infinity, mx = -Infinity, sum = 0;
+    for (const x of PD) { mn = Math.min(mn, x); mx = Math.max(mx, x); sum += x; }
+    return { PD, Ar, pMean: sum / M, ripplePa: mx - mn, rippleRel: (mx - mn) / dP, tau: C > 0 ? C * 2 * dP / qm : 0 };
+  }
+
+  Object.assign(G, { simulateNetwork, outletRipple, tipConductance, sectorConductance, slotConductance, contactRhoEq });
 })(window.Gerotor);

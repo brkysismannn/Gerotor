@@ -80,6 +80,31 @@
     return (L * L * L) / (d1[0] * d2[1] - d1[1] * d2[0]);
   }
 
+  /*
+   * Largest cutter that can machine the inner rotor (GDS "Max tool diameter to cut inner rotor").
+   * Where the trochoid is concave (signed radius ρ_Q < 0, near the tooth root) the inner profile,
+   * offset inward by rp + c, is concave with radius |ρ_Q| + rp + c; the tool radius may not exceed
+   * the smallest of these. Convex everywhere → no limit (Infinity).
+   */
+  function innerToolDiameter(p) {
+    const per = TAU / (p.N - 1), n = 720;
+    let best = Infinity, phiB = 0;
+    for (let i = 0; i < n; i++) {
+      const phi = per * i / n, r = trochoidCurvatureRadius(p, phi);
+      if (r < 0 && -r < best) { best = -r; phiB = phi; }
+    }
+    if (!Number.isFinite(best)) return { diameter: Infinity, phi: NaN };
+    // Golden-section refinement of the most concave point.
+    let a = phiB - per / n, b = phiB + per / n;
+    const g = (Math.sqrt(5) - 1) / 2, f = x => { const r = trochoidCurvatureRadius(p, x); return r < 0 ? -r : Infinity; };
+    for (let it = 0; it < 60; it++) {
+      const x1 = b - g * (b - a), x2 = a + g * (b - a);
+      if (f(x1) < f(x2)) b = x2; else a = x1;
+    }
+    const phi = 0.5 * (a + b), rho = Math.min(best, f(phi));
+    return { diameter: 2 * (rho + p.rp + p.c), rhoTrochoid: rho, phi };
+  }
+
   // Inner rotor profile point (inner-rotor frame), trochoid offset inward by `offset`.
   function innerPoint(p, phi, offset) {
     const q = trochoid(p, phi), d = trochoidD1(p, phi);
@@ -556,6 +581,6 @@
     trochoid, trochoidCurve, innerPoint, innerProfile,
     lobeLimits, lobePoint, outerProfile,
     innerAngle, chamber, derive, analyse,
-    innerSector, outerSector, lobePsi, trochoidCurvatureRadius, chamberActualArea, filletClearance,
+    innerSector, outerSector, lobePsi, trochoidCurvatureRadius, innerToolDiameter, chamberActualArea, filletClearance,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

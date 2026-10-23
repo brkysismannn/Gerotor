@@ -581,7 +581,8 @@
     check(S, 'η_m falls with speed at low Δp (viscous losses ∝ ω)', row(20).every((q, i, a) => i === 0 || q.etaM < a[i - 1].etaM));
     check(S, 'High Δp: overall efficiency has its optimum above the lowest speed', Math.max(...row(100).map(q => q.etaT)) > row(100)[0].etaT);
     const csv = G.mapCsv(map).trim().split('\n');
-    check(S, `CSV: header + ${csv.length - 1} rows, 13 columns`, csv.length === 9 && csv[0].split(',').length === 13 && csv[1].split(',').length === 13);
+    const nc = G.MAP_COLS.length;
+    check(S, `CSV: header + ${csv.length - 1} rows, ${nc} columns`, csv.length === 9 && csv[0].split(',').length === nc && csv[1].split(',').length === nc);
   }
 
   // ------------------------------------------------------------ 14. reverse engineering
@@ -797,6 +798,42 @@
     record(S, 'Density ρ(T) = ρ15·(1 − 6.5·10⁻⁴·(T − 15))', 870 * (1 - 6.5e-4 * 65), G.userOil(oil({}), 80).rho, 1e-9);
   }
 
+  // ------------------------------------------------------------ 20. GDS results panel: tool Ø, outlet ripple, charts, Excel
+
+  function suiteGdsResults() {
+    const S = '20 · GDS results & charts';
+    // GDS V2021 screenshot design (N 9, e 3.861, root 29, r_p 10, b 10, OD 95, shaft 22, fillet 2,
+    // tip clr 0.1, axial 0.1, radial 0.15, ρ 855, ν 14 cSt, double-sided outlet; 5000 rpm, 10 bar).
+    const gp = d => design(Object.assign({ N: 9, e: 3.861, R: 42.861, rp: 10, c: 0.1, fillet: 2, RvClear: 0, b: 10, OD: 95, bore: 22,
+      axialClr: 0.1, odClr: 0.15, rho: 855, nu: 14, bulk: 15000, pIn: 1.013, pVap: 0.0001, portsOn: true, leakOn: true,
+      portLayout: 'double', rpm: 5000, dp: 10 }, d));
+    record(S, 'GDS: max tool Ø to cut inner rotor (clearance not offset, as GDS)', 20.5, G.innerToolDiameter(gp({ c: 0 })).diameter, 0.5);
+    check(S, 'Tool Ø with c = 0.1 mm offset is 2c larger', Math.abs(G.innerToolDiameter(gp({})).diameter - G.innerToolDiameter(gp({ c: 0 })).diameter - 0.2) < 1e-3);
+    const r = G.analyse(gp({}));
+    record(S, 'GDS: shaft side load at 5000 rpm, 10 bar', 713.83, r.contact.shaftLoadMax, 10, { note: 'GDS port angles not reproduced exactly' });
+    record(S, 'GDS: outlet pressure ripple at 5000 rpm, 10 bar (resistive load)', 13.15, 100 * r.ports.outlet.rippleRel, 15,
+      { note: 'GDS ripple definition not documented; our load = restriction only' });
+    record(S, 'GDS: max chamber volume with 0.1 mm tip clearance', 2024, r.AmaxActual * 10, 1);
+
+    // Outlet ripple model limits.
+    const P = { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5, portsOn: true };
+    const rr = G.analyse(design(P)), sim = rr.ports.sim;
+    const res0 = G.outletRipple(Object.assign({}, design(P), { outletVol: 0 }), rr, sim);
+    let qmin = Infinity, qmax = -Infinity, qm = 0;
+    for (const q of sim.Qout) { qmin = Math.min(qmin, q); qmax = Math.max(qmax, q); qm += q / sim.Qout.length; }
+    record(S, 'Resistive limit: p − p_in = Δp·(Q/Q̄)² (ripple from flow extremes)', ((qmax / qm) ** 2 - (Math.max(qmin, 0) / qm) ** 2) * 100, 100 * res0.rippleRel, 1e-6);
+    const v20 = G.outletRipple(Object.assign({}, design(P), { outletVol: 20 }), rr, sim), v200 = G.outletRipple(Object.assign({}, design(P), { outletVol: 200 }), rr, sim);
+    check(S, `Outlet volume filters the ripple (${(100 * res0.rippleRel).toFixed(1)} → ${(100 * v20.rippleRel).toFixed(1)} → ${(100 * v200.rippleRel).toFixed(1)} %)`,
+      v20.rippleRel < res0.rippleRel && v200.rippleRel < v20.rippleRel);
+    record(S, 'Outlet model: mean pressure = p_in + Δp', P.dp, (v20.pMean - sim.pS) / 1e5, 1);
+
+    // Excel writer.
+    record(S, 'CRC-32 check value ("123456789" → CBF43926)', 0xCBF43926, G.xlsx.crc32(new TextEncoder().encode('123456789')), 0, { abs: true, unit: '' });
+    const wb = G.xlsx.workbook([{ name: 'A', rows: [['x', 1]] }]);
+    check(S, 'xlsx: ZIP signature and end-of-central-directory record', wb[0] === 0x50 && wb[1] === 0x4B && wb[wb.length - 22] === 0x50 && wb[wb.length - 21] === 0x4B && wb[wb.length - 20] === 5 && wb[wb.length - 19] === 6);
+    check(S, 'xlsx: column names A, Z, AA, AZ, BA', ['A', 'Z', 'AA', 'AZ', 'BA'].join() === [0, 25, 26, 51, 52].map(G.xlsx.colName).join());
+  }
+
   // ------------------------------------------------------------ 6. export
 
   function suiteExport() {
@@ -815,7 +852,7 @@
   function runAll() {
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil]) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults]) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };

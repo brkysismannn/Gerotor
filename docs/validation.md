@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **210 pass · 0 fail · 3 known** (213 tests, ~115 s).
+Last run: 2026-10-23 — **221 pass · 0 fail · 3 known** (224 tests, ~125 s).
 
 ## Change log of the numerical core
 
@@ -223,6 +223,38 @@ a least-squares fit. The simulation uses ν and ρ at the oil temperature from t
 
 Brookfield values are low-shear dynamic viscosities converted with ρ(T); for polymer-containing high-VI oils
 they exceed the Newtonian extrapolation, so the cold-end comparison is a plausibility check.
+
+## 20. GDS results panel, outlet pressure ripple, charts, Excel export
+
+Reference: Gerotor Design Studio V2021 screenshot (user supplied) — N 9, e 3.861, inner root 29, r_p 10,
+b 10, OD 95, shaft 22, fillet 2, tip clearance 0.1, axial 0.1, radial 0.15, ρ 855, ν 14 cSt, double-sided
+outlet port; results at 5000 rpm / 10 bar.
+
+| Quantity | GDS | This tool | Error |
+|---|---|---|---|
+| Max tool Ø to cut the inner rotor (concave root: 2·(|ρ_trochoid| + r_p)) | 20.5 mm | 20.49 mm | −0.05 % |
+| Shaft side load | 713.8 N | see test (≈ 670 N) | ≈ −6 % |
+| Pressure ripple | 13.15 % | ≈ 12.1 % (resistive load) | ≈ −8 % |
+| Max chamber volume | 2024 mm³ | 2037.7 mm³ | +0.7 % |
+| Max speed to avoid cavitation, tip criterion | 4808 rpm | 4014 rpm with r_tip = 36.62 mm | GDS evidently uses a smaller radius (≈ 30.6 mm, near the inner pitch radius 30.9 mm); not a test |
+| Hertz stress, 10 bar | ≈ 150 MPa (chart) | ≈ 340 MPa | not comparable: GDS loads the contact with the inner-rotor torque incl. friction; this tool with the outer-rotor fluid torque on one backlash contact |
+| Volumetric efficiency | flat ≈ 80 % vs pressure | falls with pressure (laminar leakage ∝ Δp) | GDS curves are model output, not measurements |
+
+GDS applies the tip clearance outside the inner-rotor offset (its tool Ø matches c = 0); this tool offsets the
+inner profile by r_p + c, so its own tool Ø is 2c larger.
+
+Outlet pressure ripple: the network's delivered flow Q(t) (at constant p_D) feeds an outlet volume and a load
+restriction sized for the mean flow at the target Δp (GT-SUITE "OutletRestriction"),
+V/K·dp/dt = Q(t) − C_d·A_r·sqrt(2(p − p_in)/ρ), one-way coupled. (A two-way coupled version inside the
+Gauss–Seidel chamber sweep did not converge — chamber and outlet node track each other through the open port
+orifice, ripple varied 3–13 % with the sub-step count — so it was replaced.)
+
+| Test | Result |
+|---|---|
+| Resistive limit (V = 0): p − p_in = Δp·(Q/Q̄)² | exact |
+| Outlet volume filters the ripple (0 → 20 → 200 cm³) | monotonic ✓ |
+| Mean outlet pressure = p_in + Δp | < 1 % |
+| xlsx writer: CRC-32 check value, ZIP records, column names; workbook opened by .NET ZipArchive, all parts well-formed XML | ✓ |
 
 ## 6. Export
 

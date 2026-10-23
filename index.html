@@ -171,6 +171,8 @@
           </div>
           <label>Groove width <span class="unit">mm</span>
             <input name="grooveW" type="number" min="0" step="0.1" value="1"></label>
+          <label>Outlet volume (pressure ripple) <span class="unit">cm³</span>
+            <input name="outletVol" type="number" min="0" step="1" value="0"></label>
           <label>Port arrangement
             <select name="portLayout">
               <option value="single">One-sided (rotors pressed to floor)</option>
@@ -309,34 +311,35 @@
         <div class="chart-legend" id="flowLegend"></div>
       </section>
       <section>
-        <h2>Performance map <small>speed × pressure sweep</small></h2>
+        <h2>Charts <small>pump performance range</small></h2>
         <form id="mapForm" class="params" autocomplete="off">
           <div class="grid2">
-            <label>Speed from <span class="unit">rpm</span><input name="rpmMin" type="number" min="1" step="100" value="500"></label>
+            <label>Speed from <span class="unit">rpm</span><input name="rpmMin" type="number" min="1" step="100" value="1000"></label>
             <label>to<input name="rpmMax" type="number" min="1" step="100" value="4000"></label>
             <label>Δp from <span class="unit">bar</span><input name="dpMin" type="number" min="0" step="5" value="10"></label>
             <label>to<input name="dpMax" type="number" min="0" step="5" value="100"></label>
-            <label>Speed points<input name="nRpm" type="number" min="2" max="12" step="1" value="6"></label>
-            <label>Pressure points<input name="nDp" type="number" min="1" max="6" step="1" value="4"></label>
+            <label>Speed points<input name="nRpm" type="number" min="1" max="8" step="1" value="6"></label>
+            <label>Pressure points<input name="nDp" type="number" min="1" max="8" step="1" value="6"></label>
+          </div>
+          <div class="checks" id="chartPick">
+            <label><input type="checkbox" value="flow" checked> Flow</label>
+            <label><input type="checkbox" value="etaV" checked> Volumetric efficiency</label>
+            <label><input type="checkbox" value="power" checked> Drive power</label>
+            <label><input type="checkbox" value="etaM"> Mechanical efficiency</label>
+            <label><input type="checkbox" value="stress" checked> Contact stress</label>
+            <label><input type="checkbox" value="etaT"> Overall efficiency</label>
+            <label><input type="checkbox" value="ripple"> Pressure ripple</label>
+            <label><input type="checkbox" value="torque"> Drive torque</label>
           </div>
           <div class="btn-row">
-            <button type="button" class="primary" id="mapRun">Compute map</button>
+            <button type="button" class="primary" id="mapRun">Create charts</button>
+            <button type="button" id="mapXlsx" disabled>Export to Excel</button>
             <button type="button" id="mapCsv" disabled>CSV</button>
-            <select id="mapQty">
-              <option value="etaT">Overall efficiency</option>
-              <option value="etaV">Volumetric efficiency</option>
-              <option value="etaM">Mechanical efficiency</option>
-              <option value="flowLpm">Delivered flow</option>
-              <option value="torque">Shaft torque</option>
-              <option value="powerIn">Input power</option>
-            </select>
             <button type="button" id="maxRun" title="Highest speed with peak chamber void ≤ 0.5 % at the current Δp and inlet pressure">Max speed</button>
           </div>
         </form>
         <div class="note" id="mapStatus"></div>
         <div class="note" id="maxStatus"></div>
-        <canvas class="chart" id="mapChart"></canvas>
-        <div class="chart-legend" id="mapLegend"></div>
       </section>
       <section>
         <h2>Dimensions</h2>
@@ -359,6 +362,14 @@
     </aside>
   </main>
 
+  <dialog id="chartsDlg" class="charts-dlg">
+    <div class="dlg-head">
+      <h2>Charts <small id="chartsInfo"></small></h2>
+      <button type="button" id="chartsClose" aria-label="Close">✕</button>
+    </div>
+    <div class="chart-grid" id="chartGrid"></div>
+  </dialog>
+
   <script src="js/geometry.js"></script>
   <script src="js/ports.js"></script>
   <script src="js/backlash.js"></script>
@@ -372,6 +383,7 @@
   <script src="js/assist.js"></script>
   <script src="js/render.js"></script>
   <script src="js/charts.js"></script>
+  <script src="js/xlsx.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
   <script src="js/assist-ui.js"></script>

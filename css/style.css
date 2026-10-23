@@ -225,6 +225,19 @@ dialog#assistDlg {
   border-radius: 8px; background: var(--panel); color: var(--text);
 }
 dialog#assistDlg::backdrop { background: rgba(0, 0, 0, .45); }
+dialog.charts-dlg {
+  width: min(1400px, 96vw); max-height: 94vh; padding: 0; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--panel); color: var(--text);
+}
+dialog.charts-dlg::backdrop { background: rgba(0, 0, 0, .45); }
+.charts-dlg .dlg-head button { margin-left: auto; }
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; padding: 12px 16px 16px; overflow: auto; max-height: calc(94vh - 56px); }
+.chart-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; background: var(--bg, var(--panel)); }
+.chart-card h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.chart-card h3 small { font-weight: 400; color: var(--text-muted); }
+.chart-card .chart { height: 220px; }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; margin: 6px 0; font-size: 12.5px; }
+.checks label { display: flex; align-items: center; gap: 5px; margin: 0; }
 .dlg-head { display: flex; align-items: baseline; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
 .dlg-head h2 { margin: 0; font-size: 16px; }
 .dlg-head button { margin-left: auto; }

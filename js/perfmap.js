@@ -16,7 +16,7 @@
     const p = Object.assign({}, p0, { rpm, dp, simSub: p0.simSub || 6 });
     const qTheo = res.cc * 1e-6 * rpm / 60;
     const r = Object.assign({}, res, { ports: null, contact: null });
-    let etaV = 1, ripple = res.ripple, pMax = (p.pIn + dp), voidMax = 0;
+    let etaV = 1, ripple = res.ripple, pMax = (p.pIn + dp), voidMax = 0, pRipple = NaN;
     if (p.portsOn && res.ports && res.ports.As && rpm > 0) {
       const sim = G.simulateNetwork(p, res, res.ports.As, res.ports.Ad, res.ports);
       let qs = 0, qMin = Infinity, qMax = -Infinity;
@@ -28,6 +28,8 @@
       etaV = qMean / qTheo;
       ripple = (qMax - qMin) / qMean;
       r.ports = { sim, portEfficiency: etaV };
+      const out = dp > 0 ? G.outletRipple(p, res, sim) : null;
+      if (out) pRipple = out.rippleRel;
     }
     if (dp > 0) r.contact = G.computeContact(p, r, { quasiStatic: !r.ports });
     const mech = G.computeMechanical(p, r);
@@ -36,9 +38,23 @@
       flowLpm: etaV * qTheo * 6e4,
       etaV, etaM: mech.etaM, etaT: mech.etaT,
       torque: mech.Mshaft, powerIn: mech.powerIn, powerOut: mech.powerOut,
-      ripple, pMaxBar: pMax, voidMax,
+      ripple, pMaxBar: pMax, voidMax, pRipple,
       hertz: r.contact ? r.contact.pmaxMax : NaN,
+      stressCurve: r.contact ? lobeStressCurve(r.contact, res) : null,
+      sideLoad: r.contact ? r.contact.shaftLoadMax : NaN,
     };
+  }
+
+  // Hertz pressure on one outer-rotor lobe over its engagement (GDS "Contact Stress" plot):
+  // outer rotation angle [°] and p_max [Pa] while lobe 0 carries the load.
+  function lobeStressCurve(ct, res) {
+    const ang = [], pm = [];
+    const stride = Math.max(1, Math.round(res.M / 360));
+    for (let j = 0; j < res.M; j += stride) {
+      ang.push(j * res.dt * 180 / Math.PI);
+      pm.push(ct.lobe[j] === 0 ? ct.Pmax[j] : 0);
+    }
+    return { ang, pm };
   }
 
   function performanceMap(p, res, opt) {
@@ -106,12 +122,15 @@
     return { rpm: lo, rpmInlet, evals, limit, gds };
   }
 
+  const MAP_COLS = ['rpm', 'dp_bar', 'flow_Lmin', 'eta_v', 'eta_m', 'eta_t', 'torque_Nm', 'power_in_W', 'power_out_W', 'flow_ripple', 'p_max_bar_abs', 'void_max', 'hertz_MPa', 'pressure_ripple', 'side_load_N'];
+  const mapRow = q => [q.rpm, q.dp, q.flowLpm, q.etaV, q.etaM, q.etaT, q.torque, q.powerIn, q.powerOut, q.ripple, q.pMaxBar, q.voidMax, q.hertz / 1e6, q.pRipple, q.sideLoad];
+
   function mapCsv(map) {
-    const cols = ['rpm', 'dp_bar', 'flow_Lmin', 'eta_v', 'eta_m', 'eta_t', 'torque_Nm', 'power_in_W', 'power_out_W', 'flow_ripple', 'p_max_bar_abs', 'void_max', 'hertz_MPa'];
-    const rows = map.points.map(q => [q.rpm, q.dp, q.flowLpm, q.etaV, q.etaM, q.etaT, q.torque, q.powerIn, q.powerOut, q.ripple, q.pMaxBar, q.voidMax, q.hertz / 1e6]
+    const cols = MAP_COLS;
+    const rows = map.points.map(q => mapRow(q)
       .map(x => Number.isFinite(x) ? +x.toPrecision(6) : '').join(','));
     return cols.join(',') + '\n' + rows.join('\n') + '\n';
   }
 
-  Object.assign(G, { performanceMap, operatingPoint, mapCsv, maxSpeed, voidAt, gdsCavitationLimits });
+  Object.assign(G, { performanceMap, operatingPoint, mapCsv, maxSpeed, voidAt, gdsCavitationLimits, MAP_COLS, mapRow });
 })(window.Gerotor);

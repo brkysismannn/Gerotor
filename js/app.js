@@ -6,7 +6,7 @@
     N: 7, e: 3, R: 30, rp: 8, c: 0.03, Rv: 28, RvAuto: true, RvClear: 0.5, fillet: 0,
     b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100,
     portsOn: true, portRo: 28, portRoAuto: true, portRi: 19, portRiAuto: true,
-    sucStart: 0, sucEnd: 0, delStart: 0, delEnd: 0, portLayout: 'shadow',
+    sucStart: 0, sucEnd: 0, delStart: 0, delEnd: 0, portLayout: 'shadow', outletVol: 0,
     gSucStart: 0, gSucEnd: 0, gDelStart: 0, gDelEnd: 0, grooveW: 1,
     pIn: 1, pVap: 0.2, rho: 860, bulk: 1400, Cd: 0.7, nu: 30,
     leakOn: true, axialClr: 0.05, shaftVent: true, tipGapModel: 'backlash',
@@ -143,6 +143,7 @@
         ['Flow ripple (port model)', f(pr.ripple * 100, 2) + ' %'],
         ['Chamber pressure min / max', f(pr.pMinBar, 2) + ' / ' + f(pr.pMaxBar, 1) + ' bar'],
       );
+      if (pr.outlet) m.push(['Outlet pressure ripple', f(pr.outlet.rippleRel * 100, 2) + ' % of Δp (' + f(pr.outlet.ripplePa / 1e5, 2) + ' bar p-p)']);
       if (params.leakOn && pr.leak) {
         const lpm = q => f(q * 6e4, 3);
         m.push(['Leak flows: tip (gross) / bore drain / lands', `${lpm(pr.leak.tip)} / ${lpm(pr.leak.bore)} / ${lpm(pr.leak.land)} L/min`]);
@@ -152,6 +153,14 @@
       m.push(['Inlet port velocity', f(pr.inletVelocity, 2) + ' m/s']);
     }
     if (ok) m.push(['Inner tip speed', f(res.tipSpeed, 2) + ' m/s']);
+    if (ok) {
+      const tool = G.innerToolDiameter(p);
+      m.push(['Max tool Ø to cut inner rotor', Number.isFinite(tool.diameter) ? f(tool.diameter, 2) + ' mm' : 'no concave region']);
+    }
+    if (pr && pr.suction && G.gdsCavitationLimits) {
+      const cav = G.gdsCavitationLimits(p, res);
+      m.push(['Max speed to avoid cavitation (GDS criteria)', f(cav.rpm, 0) + ' rpm (' + cav.basis + ')']);
+    }
     const ct = ok && res.contact;
     if (ct) {
       m.push(

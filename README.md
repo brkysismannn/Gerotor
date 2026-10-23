@@ -26,7 +26,13 @@ No installation: open `index.html` in a browser.
   (rattle) warning. Material E, ν for both rotors.
 - **Viscous friction & efficiencies:** outer-rotor OD and face shear, inner-rotor face shear, optional shaft
   journal bearings (Totaro et al. 2025); shaft torque, mechanical / overall efficiency, input power.
-- **Performance map:** speed × pressure sweep of flow, η_v, η_m, η_t, torque and power; chart and CSV export.
+- **Charts (GDS style):** sweep of the pump performance range (speeds × delivery pressures); tick the charts to
+  show — flow, drive power, drive torque, volumetric / mechanical / overall efficiency, outlet pressure ripple
+  (vs delivery pressure, one line per speed) and Hertz contact stress over the outer-rotor rotation; export to
+  Excel (.xlsx, no dependencies) or CSV.
+- **Outlet pressure ripple:** delivered flow into an outlet volume and a load restriction sized for the target Δp.
+- **Results like GDS:** max tool Ø to cut the inner rotor, max speed to avoid cavitation, shaft side load,
+  pressure ripple.
 - **Reverse engineering:** profile parameters and profile clearance from measured diameters of an existing set.
 - **Oil presets and your own oil:** viscosity (ASTM D341 / Walther) and density vs temperature for common oils,
   or a line fitted through your datasheet values (2 points, optional 3rd); the simulation reads ν, ρ at the oil
