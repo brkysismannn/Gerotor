@@ -920,6 +920,20 @@
     const c1 = cs[1], q = r.cc * 1e-6 * c1.rpm / 60 * r.ports.portEfficiency;
     record(S, 'Load restriction sized for the case Δp at the expected flow: Cd·A·√(2Δp/ρ) = Q', q, p.Cd * c1.A * Math.sqrt(2 * c1.dp * 1e5 / p.rho), 1e-9);
     check(S, 'Case CSV: header + one row per case', ex.files['cases.csv'].trim().split('\n').length === cs.length + 1);
+
+    // Viscosity–temperature coupling (FluidProperties = GT "VisSensor").
+    const walther = (od, T) => Math.pow(10, Math.pow(10, od.A - od.B * Math.log10(T + 273.15))) - 0.7;
+    const vg = G.OILS.vg46, pv = design(Object.assign({}, P, { oil: 'vg46', oilT: 60, nu: G.viscosityAt(vg.nu40, vg.nu100, 60), rho: G.densityAt(vg.rho15, 60) }));
+    const od = G.modelica.oilData(pv);
+    record(S, 'Oil data (ISO VG 46): Walther A, B give ν at the design temperature', pv.nu, walther(od, 60), 1e-9);
+    record(S, 'Oil data: ν(100 °C) from the exported A, B = datasheet ν100', vg.nu100, walther(od, 100), 1e-9);
+    record(S, 'Oil data: ρ15·(1 − α(T − 15)) = design density', pv.rho, od.rho15 * (1 - od.alpha * (60 - 15)), 1e-9);
+    const oc = G.modelica.oilData(design(P));
+    const nuC = design(P).nu;
+    check(S, 'Custom oil (ν, ρ only): B = 0 and α = 0 → constant properties', oc.B === 0 && oc.alpha === 0 && Math.abs(walther(oc, 120) / nuC - 1) < 1e-9);
+    const nOuter = (mo.match(/outer FluidProperties fluid;/g) || []).length;
+    check(S, `Fluid properties used by chamber, tip gap, axial gap, port land, friction, lumped gerotor, restriction (${nOuter} components)`, nOuter === 7 && /inner Components\.FluidProperties fluid/.test(mo));
+    check(S, 'Case script overrides speed, restriction area and oil temperature', /-override=w=[^,]+,A=[^,]+,T_oil=/.test(ex.files['cases.mos']));
   }
 
   // ------------------------------------------------------------ 6. export

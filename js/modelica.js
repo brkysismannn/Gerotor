@@ -57,6 +57,24 @@
     return { Cvisc: w1 > 0 ? visc / w1 : 0, Kfloor: p.dp > 0 ? floor / (p.dp * 1e5) : 0, J, visc, floor };
   }
 
+  /*
+   * Oil temperature model for Modelica: Walther (ASTM D341) A, B of the selected oil (preset or
+   * datasheet fit) and ρ15 with linear expansion; 'custom' oil (ν, ρ only) → B = 0, α = 0 (constant).
+   */
+  function oilData(p) {
+    const T = Number.isFinite(p.oilT) ? p.oilT : 40;
+    let fit = null, rho15 = p.rho, alpha = 0, label = 'custom (constant nu, rho)';
+    if (p.oil === 'user' && G.userOil) {
+      const u = G.userOil(p, T);
+      if (u && u.fit) { fit = u.fit; rho15 = p.uRho15; alpha = 6.5e-4; label = 'datasheet oil (ASTM D341 fit)'; }
+    } else if (p.oil && p.oil !== 'custom' && G.OILS && G.OILS[p.oil]) {
+      const o = G.OILS[p.oil];
+      fit = G.waltherFit(o.nu40, o.nu100); rho15 = o.rho15; alpha = 6.5e-4; label = o.label;
+    }
+    if (!fit) fit = { A: Math.log10(Math.log10(p.nu + 0.7)), B: 0 };
+    return { A: fit.A, B: fit.B, rho15, alpha, T, label: label.replace(/"/g, "'") };
+  }
+
   function cases(p, res, opt) {
     opt = opt || {};
     const lin = (a, c, n) => n <= 1 ? [a] : Array.from({ length: n }, (_, i) => a + (c - a) * i / (n - 1));
@@ -67,7 +85,7 @@
     for (const n of speeds) for (const dp of dps) {
       const qExp = res.cc * 1e-6 * n / 60 * etaV;
       const A = dp > 0 ? qExp / (p.Cd * Math.sqrt(2 * dp * 1e5 / p.rho)) : 1e-3;
-      out.push({ label: `${n.toFixed(0)} rpm : ${+dp.toFixed(2)} bar`, rpm: n, dp, qExpLpm: qExp * 6e4, A });
+      out.push({ label: `${n.toFixed(0)} rpm : ${+dp.toFixed(2)} bar`, rpm: n, dp, qExpLpm: qExp * 6e4, A, T: Number.isFinite(p.oilT) ? p.oilT : 40 });
     }
     return out;
   }
@@ -84,9 +102,15 @@
     const etaV = res.ports && res.ports.portEfficiency ? res.ports.portEfficiency : 1;
     const qExp = res.cc * 1e-6 * p.rpm / 60 * etaV;
     const Ar = p.dp > 0 ? qExp / (p.Cd * Math.sqrt(2 * p.dp * 1e5 / p.rho)) : 1e-3;
-    const Vout = Math.max(p.outletVol || 0, 1) * 1e-6;
+    // Port volumes: kidney port area × port depth (= rotor width, as in GDS) × number of faces, or the
+    // user's outlet volume if larger.
+    const pr0 = res.ports && res.ports.suction ? res.ports : null;
+    const portVol = (port, fill) => port ? port.area * p.b * (fill || 1) * 1e-9 : 1e-6;
+    const Vout = Math.max((p.outletVol || 0) * 1e-6, portVol(pr0 && pr0.delivery, p.fillD));
+    const Vin = portVol(pr0 && pr0.suction, p.fillS);
     const date = new Date().toISOString().slice(0, 10);
     const fr = frictionData(p, res);
+    const oil = oilData(p);
 
     return `within ;
 package ${name} "Gerotor pump exported from the Gerotor Design Tool (${date})"
@@ -141,7 +165,14 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
     constant Real Gbore(unit="m3/(s.Pa)") = ${num(c.Gbore)} "Face gaps chamber -> shaft bore (per chamber)";
     constant Real Gper(unit="m3/(s.Pa)") = ${num(c.Gper)} "Face gaps chamber -> periphery (per chamber)";
     constant Real Gland(unit="m3/(s.Pa)") = ${num(c.Gland)} "Port lands outlet -> inlet";
-    constant Real Cvisc(unit="N.m.s/rad") = ${num(fr.Cvisc)} "Viscous loss torque per shaft speed (at the design point)";
+    constant Real waltherA = ${num(oil.A)} "ASTM D341: log10(log10(nu[cSt] + 0.7)) = A - B*log10(T[K])";
+    constant Real waltherB = ${num(oil.B)} "ASTM D341 slope (0: viscosity independent of temperature)";
+    constant SI.Density rho15 = ${num(oil.rho15)} "Density at 15 degC";
+    constant Real alpha(unit="1/K") = ${num(oil.alpha)} "Thermal expansion coefficient of the density";
+    constant Real T_ref(unit="degC") = ${num(oil.T)} "Design oil temperature (all tables and coefficients refer to it)";
+    constant SI.DynamicViscosity muRef = ${num(p.nu * 1e-6 * p.rho)} "Dynamic viscosity at T_ref";
+    constant String oilName = "${oil.label}";
+    constant Real Cvisc(unit="N.m.s/rad") =${num(fr.Cvisc)} "Viscous loss torque per shaft speed (at the design point)";
     constant Real Kfloor(unit="N.m/Pa") = ${num(fr.Kfloor)} "Floor friction torque per pressure rise (single-sided ports)";
     constant SI.Inertia J = ${num(fr.J)} "Rotor inertia referred to the shaft (steel)";
     constant SI.Area AsPort =${num((res.ports && res.ports.suction ? res.ports.suction.area : 100) * 1e-6 * (p.fillS || 1))} "Suction port area";
@@ -149,6 +180,36 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
 
   package Components
     extends Modelica.Icons.Package;
+
+    model FluidProperties "Oil properties vs temperature (VisSensor): ASTM D341 viscosity, linear expansion; declare as 'inner fluid'"
+      parameter Boolean useTemperatureInput = false "Read the temperature from the input T_in";
+      parameter Real T_degC(unit="degC") = Data.T_ref "Oil temperature (if no input)";
+      Modelica.Blocks.Interfaces.RealInput T_in(unit="degC") if useTemperatureInput "Oil temperature"
+        annotation (Placement(transformation(extent={{-140,-20},{-100,20}})));
+      Real T(unit="degC") "Oil temperature";
+      SI.KinematicViscosity nu "Kinematic viscosity";
+      SI.Density rho "Density";
+      SI.DynamicViscosity mu "Dynamic viscosity";
+      Real leakFactor "muRef/mu: scales the laminar gap conductances computed at T_ref";
+    protected
+      Modelica.Blocks.Interfaces.RealInput T_internal(unit="degC");
+    equation
+      connect(T_in, T_internal);
+      if not useTemperatureInput then
+        T_internal = T_degC;
+      end if;
+      T = T_internal;
+      nu = (10^(10^(Data.waltherA - Data.waltherB*log10(T + 273.15))) - 0.7)*1e-6;
+      rho = Data.rho15*(1 - Data.alpha*(T - 15));
+      mu = nu*rho;
+      leakFactor = Data.muRef/mu;
+      annotation (Icon(graphics={Polygon(points={{0,80},{60,0},{0,-80},{-60,0},{0,80}}, lineColor={0,0,0},
+        fillColor={255,255,170}, fillPattern=FillPattern.Solid), Text(extent={{-50,30},{50,-30}}, textString="ν(T)"),
+        Text(extent={{-150,-90},{150,-130}}, textString="%name", lineColor={0,0,255})}),
+        Documentation(info="<html><p>Oil: ${oil.label}, design temperature ${num(oil.T)} &deg;C. ASTM D341 (Ubbelohde–Walther): log10(log10(&nu;+0.7)) = A &minus; B&middot;log10(T),
+          &nu; in cSt, T in K; density &rho;15&middot;(1 &minus; &alpha;(T &minus; 15)). The laminar leakage conductances scale with
+          &mu;<sub>ref</sub>/&mu;, the viscous friction with &mu;/&mu;<sub>ref</sub>, the orifices with &rho;.</p></html>"));
+    end FluidProperties;
 
     model Rotor "Gerotor kinematics (inner shaft angle -> outer rotor angle); declare as 'inner rotor'"
       parameter Integer N = nLobes;
@@ -170,6 +231,7 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
       parameter SI.PressureDifference cavWidth = 0.1e5 "Transition width of the cavitation model";
       parameter SI.AbsolutePressure p_start = Data.pIn;
       outer Rotor rotor;
+      outer FluidProperties fluid;
       Interfaces.FluidPort In "To the inlet port volume (suction orifice)"
         annotation (Placement(transformation(extent={{-110,-10},{-90,10}})));
       Interfaces.FluidPort Out "To the outlet port volume (delivery orifice)"
@@ -192,8 +254,8 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
       dV = Data.b*tab.y[2]*rotor.w2;
       As = tab.y[3];
       Ad = tab.y[4];
-      In.q = Data.Cd*As*sqrt(2/Data.rho)*Functions.regRoot(In.p - p, 100);
-      Out.q = Data.Cd*Ad*sqrt(2/Data.rho)*Functions.regRoot(Out.p - p, 100);
+      In.q = Data.Cd*As*sqrt(2/fluid.rho)*Functions.regRoot(In.p - p, 100);
+      Out.q = Data.Cd*Ad*sqrt(2/fluid.rho)*Functions.regRoot(Out.p - p, 100);
       Aux.p = p;
       V/(Data.K*Functions.cavitationFactor(p, Data.pCav, cavWidth))*der(p) = In.q + Out.q + Aux.q - dV;
       flange.tau*rotor.w1 = -p*dV "power balance";
@@ -207,6 +269,7 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
       parameter Integer k = 1 "Gap after chamber k";
       parameter Integer N = nLobes;
       outer Rotor rotor;
+      outer FluidProperties fluid;
       Interfaces.FluidPort port_a "Chamber k" annotation (Placement(transformation(extent={{-110,-10},{-90,10}})));
       Interfaces.FluidPort port_b "Chamber k+1" annotation (Placement(transformation(extent={{90,-10},{110,10}})));
       Modelica.Blocks.Tables.CombiTable1Ds tab(table=Data.table, columns={6},
@@ -215,7 +278,7 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
       Real G(unit="m3/(s.Pa)") "Conductance";
     equation
       tab.u = rotor.theta + 2*Modelica.Constants.pi*(k - 1)/N;
-      G = tab.y[1];
+      G = tab.y[1]*fluid.leakFactor;
       port_a.q = G*(port_a.p - port_b.p);
       port_a.q + port_b.q = 0;
       annotation (Icon(graphics={Rectangle(extent={{-80,40},{80,-40}}, lineColor={0,0,0}, fillColor={215,215,215},
@@ -227,23 +290,25 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
       parameter Integer N = nLobes;
       Interfaces.FluidPort chambers[N] annotation (Placement(transformation(extent={{-10,-110},{10,-90}})));
       Interfaces.FluidPort bore "Shaft bore (vented to the inlet)" annotation (Placement(transformation(extent={{-110,-10},{-90,10}})));
+      outer FluidProperties fluid;
       SI.AbsolutePressure pPer "Periphery node pressure";
     equation
       for i in 1:N loop
-        chambers[i].q = Data.Gper*(chambers[i].p - pPer) + Data.Gbore*(chambers[i].p - bore.p);
+        chambers[i].q = fluid.leakFactor*(Data.Gper*(chambers[i].p - pPer) + Data.Gbore*(chambers[i].p - bore.p));
       end for;
       sum(Data.Gper*(chambers[i].p - pPer) for i in 1:N) = 0;
-      bore.q = -sum(Data.Gbore*(chambers[i].p - bore.p) for i in 1:N);
+      bore.q = -fluid.leakFactor*sum(Data.Gbore*(chambers[i].p - bore.p) for i in 1:N);
       annotation (Icon(graphics={Rectangle(extent={{-100,60},{100,-60}}, lineColor={0,0,0}, fillColor={192,192,192},
         fillPattern=FillPattern.Solid), Rectangle(extent={{-70,30},{70,10}}, fillColor={255,255,0}, fillPattern=FillPattern.Solid),
         Text(extent={{-150,110},{150,70}}, textString="%name", lineColor={0,0,255})}));
     end AxialGap;
 
     model PortLand "Leakage across the port lands (outlet -> inlet)"
+      outer FluidProperties fluid;
       Interfaces.FluidPort port_a annotation (Placement(transformation(extent={{-110,-10},{-90,10}})));
       Interfaces.FluidPort port_b annotation (Placement(transformation(extent={{90,-10},{110,10}})));
     equation
-      port_a.q = Data.Gland*(port_a.p - port_b.p);
+      port_a.q = fluid.leakFactor*Data.Gland*(port_a.p - port_b.p);
       port_a.q + port_b.q = 0;
       annotation (Icon(graphics={Rectangle(extent={{-80,30},{80,-30}}, lineColor={0,0,0}, fillColor={215,215,215},
         fillPattern=FillPattern.Solid), Text(extent={{-150,80},{150,40}}, textString="%name", lineColor={0,0,255})}));
@@ -255,12 +320,13 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
       Modelica.Mechanics.Rotational.Interfaces.Flange_a flange annotation (Placement(transformation(extent={{90,-10},{110,10}})));
       Interfaces.FluidPort port_out "Outlet pressure (sensing, no flow)" annotation (Placement(transformation(extent={{-10,90},{10,110}})));
       Interfaces.FluidPort port_in "Inlet pressure (sensing, no flow)" annotation (Placement(transformation(extent={{-110,-10},{-90,10}})));
+      outer FluidProperties fluid;
       SI.AngularVelocity w = der(flange.phi);
       SI.Torque tauLoss = flange.tau "Loss torque";
     equation
       port_out.q = 0;
       port_in.q = 0;
-      flange.tau = Cvisc*w + Kfloor*max(port_out.p - port_in.p, 0)*tanh(w/0.1);
+      flange.tau = Cvisc*w/fluid.leakFactor + Kfloor*max(port_out.p - port_in.p, 0)*tanh(w/0.1);
       annotation (Icon(graphics={Rectangle(extent={{-90,60},{90,-60}}, lineColor={0,0,0}, fillColor={170,213,255},
         fillPattern=FillPattern.Solid), Line(points={{-60,-30},{60,-30}}, thickness=1), Line(points={{-50,-30},{-30,30}}),
         Line(points={{-10,-30},{10,30}}), Line(points={{30,-30},{50,30}}), Text(extent={{-150,-70},{150,-110}}, textString="%name", lineColor={0,0,255})}));
@@ -270,7 +336,9 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
       parameter Integer N = nLobes "Outer rotor lobes";
       parameter SI.Length b = ${num(p.b * 1e-3)} "Rotor width";
       parameter SI.BulkModulus K = ${num(p.bulk * 1e6)} "Fluid bulk modulus";
-      parameter SI.Density rho = ${num(p.rho)} "Fluid density";
+      outer FluidProperties fluid;
+      SI.Density rho = fluid.rho "Fluid density";
+      Real f = fluid.leakFactor "Viscosity scaling of the gap conductances (muRef/mu)";
       parameter Real Cd = ${num(p.Cd)} "Port discharge coefficient";
       parameter SI.AbsolutePressure pCav = ${num(p.pVap * 1e5)} "Cavitation pressure";
       parameter SI.PressureDifference cavWidth = 0.1e5 "Transition width of the cavitation model";
@@ -313,17 +381,17 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
         dV[k] = b*tab[k].y[2]*w2;
         As[k] = tab[k].y[3];
         Ad[k] = tab[k].y[4];
-        Gtip[k] = tab[k].y[5];
+        Gtip[k] = tab[k].y[5]*f;
         qs[k] = Cd*As[k]*sqrt(2/rho)*Functions.regRoot(suction.p - p[k], 100);
         qd[k] = Cd*Ad[k]*sqrt(2/rho)*Functions.regRoot(delivery.p - p[k], 100);
         qt[k] = Gtip[k]*(p[if k == N then 1 else k + 1] - p[k]);
         V[k]/(K*Functions.cavitationFactor(p[k], pCav, cavWidth))*der(p[k]) =
           qs[k] + qd[k] + qt[k] - qt[if k == 1 then N else k - 1]
-          + Gbore*(pBore - p[k]) + Gper*(pPer - p[k]) - dV[k];
+          + f*(Gbore*(pBore - p[k]) + Gper*(pPer - p[k])) - dV[k];
       end for;
       // Port flows (bore drain returns to the suction side when vented).
-      suction.q = sum(qs) - (if boreVented then sum(Gbore*(p[k] - suction.p) for k in 1:N) else 0) - Gland*(delivery.p - suction.p);
-      delivery.q = sum(qd) + Gland*(delivery.p - suction.p);
+      suction.q = sum(qs) - (if boreVented then f*sum(Gbore*(p[k] - suction.p) for k in 1:N) else 0) - f*Gland*(delivery.p - suction.p);
+      delivery.q = sum(qd) + f*Gland*(delivery.p - suction.p);
       // Power balance: shaft power = sum of p*(-dV/dt)  ->  torque on the inner shaft.
       shaft.tau*w1 = -sum(p[k]*dV[k] for k in 1:N);
       annotation (Icon(graphics={
@@ -352,12 +420,12 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
     model Restriction "Sharp-edged orifice (load restriction)"
       parameter SI.Area A = ${num(Ar)} "Flow area";
       parameter Real Cd = ${num(p.Cd)} "Discharge coefficient";
-      parameter SI.Density rho = ${num(p.rho)} "Density";
+      outer FluidProperties fluid;
       Interfaces.FluidPort port_a annotation (Placement(transformation(extent={{-110,-10},{-90,10}})));
       Interfaces.FluidPort port_b annotation (Placement(transformation(extent={{90,-10},{110,10}})));
     equation
       port_a.q + port_b.q = 0;
-      port_a.q = Cd*A*sqrt(2/rho)*Functions.regRoot(port_a.p - port_b.p, 100);
+      port_a.q = Cd*A*sqrt(2/fluid.rho)*Functions.regRoot(port_a.p - port_b.p, 100);
       annotation (Icon(graphics={Line(points={{-90,0},{90,0}}, color={0,127,255}, thickness=0.5),
         Polygon(points={{-30,40},{30,40},{0,6},{-30,40}}, lineColor={0,0,0}, fillColor={0,0,0}, fillPattern=FillPattern.Solid),
         Polygon(points={{-30,-40},{30,-40},{0,-6},{-30,-40}}, lineColor={0,0,0}, fillColor={0,0,0}, fillPattern=FillPattern.Solid),
@@ -377,7 +445,7 @@ ${tabText}] "Chamber 1 vs outer-rotor angle: theta [rad], A [m2], dA/dtheta [m2/
 
   package Examples
     extends Modelica.Icons.ExamplesPackage;
-${networkSystem(p, { w1, Ar, stop, revs, qExp })}
+${networkSystem(p, { w1, Ar, stop, revs, qExp, oil, Vin })}
     model PumpSystemLumped "Same system with the gerotor as one block (Components.GerotorLumped)"
       extends Modelica.Icons.Example;
       parameter SI.AngularVelocity w = ${num(w1)} "Shaft speed (${p.rpm} rpm)";
@@ -385,6 +453,8 @@ ${networkSystem(p, { w1, Ar, stop, revs, qExp })}
       parameter SI.Area A = ${num(Ar)} "Load restriction area (sized for ${p.dp} bar at the expected flow)";
       Modelica.Mechanics.Rotational.Sources.ConstantSpeed speed(w_fixed=w, phi(start=0, fixed=true))
         annotation (Placement(transformation(extent={{-70,-60},{-50,-40}})));
+      parameter Real T_oil(unit="degC") = Data.T_ref "Oil temperature";
+      inner Components.FluidProperties fluid(T_degC=T_oil) annotation (Placement(transformation(extent={{-70,30},{-50,50}})));
       Components.GerotorLumped pump annotation (Placement(transformation(extent={{-20,-20},{20,20}})));
       Components.Tank inletTank(p=pIn) annotation (Placement(transformation(extent={{-70,-20},{-50,0}})));
       Components.Volume outletVolume annotation (Placement(transformation(extent={{30,30},{50,50}})));
@@ -437,6 +507,8 @@ end ${name};
       parameter SI.AbsolutePressure pIn = ${num(p.pIn * 1e5)} "Inlet / tank pressure";
       parameter SI.Area A = ${num(s.Ar)} "Outlet restriction area (sized for ${p.dp} bar at the expected flow)";
       parameter Real gearRatio = 1 "Drive gear ratio (engine / pump shaft)";
+      parameter Real T_oil(unit="degC") = Data.T_ref "Oil temperature (${s.oil.label})";
+      inner Components.FluidProperties fluid(T_degC=T_oil) "VisSensor: oil viscosity and density vs temperature" annotation (Placement(transformation(extent={{-200,-150},{-170,-120}})));
       SI.VolumeFlowRate qDelivered = OutletRestriction.port_a.q "Delivered flow";
       SI.Torque tauShaft = -PumpGearRatio.flange_b.tau "Pump shaft torque incl. mechanical losses";
       SI.Torque tauPressure = ${Array.from({ length: N }, (_, i) => `Vol${i + 1}.flange.tau`).join(' + ')} "Pressure torque (sum over the chambers)";
@@ -451,7 +523,7 @@ end ${name};
       Components.GerotorFriction GerotorFriction annotation (Placement(transformation(extent={{-130,-270},{-110,-250}})));
       Components.Tank InletEnv(p=pIn) annotation (Placement(transformation(extent={{-300,-40},{-280,-20}})));
       Components.Restriction InletLine(A=4*Data.AsPort) "Inlet gallery" annotation (Placement(transformation(extent={{-265,-10},{-245,10}})));
-      Components.Volume InletVol(V=${num(Math.max(p.inletVol || 0, 1) * 1e-6)}, p_start=pIn) annotation (Placement(transformation(extent={{-225,-10},{-205,10}})));
+      Components.Volume InletVol(V=${num(s.Vin)}, p_start=pIn) annotation (Placement(transformation(extent={{-225,-10},{-205,10}})));
       Components.Volume OutletVol annotation (Placement(transformation(extent={{205,-10},{225,10}})));
       Components.Restriction OutletRestriction(A=A) annotation (Placement(transformation(extent={{245,-10},{265,10}})));
       Components.Tank OutletEnv(p=pIn) annotation (Placement(transformation(extent={{280,-40},{300,-20}})));
@@ -496,7 +568,7 @@ ${decl.join('\n')}
       const w1 = cs.rpm * TAU / 60, w2 = w1 * (p.N - 1) / p.N, stop = 6 * TAU / Math.max(w2, 1e-9);
       lines.push(`// Case ${i + 1}: ${cs.label}, expected flow ${cs.qExpLpm.toFixed(3)} L/min`);
       lines.push(`simulate(${name}.Examples.PumpSystem, stopTime=${num(stop)}, numberOfIntervals=4000, ` +
-        `fileNamePrefix="case${i + 1}", simflags="-override=w=${num(w1)},A=${num(cs.A)}"); getErrorString();`);
+        `fileNamePrefix="case${i + 1}", simflags="-override=w=${num(w1)},A=${num(cs.A)},T_oil=${num(cs.T)}"); getErrorString();`);
     });
     return lines.join('\n') + '\n';
   }
@@ -536,5 +608,5 @@ end ${name}_System;
     };
   }
 
-  G.modelica = { exportModelica, packageText, systemText, frictionData, caseScript, caseCsv, cases, tables, ident };
+  G.modelica = { exportModelica, packageText, systemText, frictionData, oilData, caseScript, caseCsv, cases, tables, ident };
 })(window.Gerotor);

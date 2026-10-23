@@ -56,8 +56,10 @@ No installation: open `index.html` in a browser.
   chamber model, grid + pattern search, full re-verification; shows the Gamez-Montero heuristic for comparison.
 - **OpenModelica:** one click builds a Modelica package (gerotor component with the exact angle tables, outlet
   volume, load restriction, tanks, speed source — a ready system model) plus the case table, and opens it in
-  OMEdit via the local server (`tools/serve.ps1`); or download the `.mo` / `cases.mos`. Cross-checked against the
-  browser model (delivered flow +0.3 %).
+  OMEdit via the local server (`tools/serve.ps1`); or download the `.mo` / `cases.mos`. GT-SUITE-like network
+  (chamber volumes, tip gaps, axial gaps, port volumes, outlet restriction, friction, shaft inertia, gear, speed
+  source) with oil viscosity/density vs temperature (ASTM D341). Cross-checked against the browser model
+  (delivered flow −0.02 … +0.3 %, torque ≈ 0).
 - **Export:** DXF (R12, layered: OUTER_ROTOR, INNER_ROTOR, PORTS), SVG (mm), CSV point cloud; parameters can be saved/loaded as JSON.
 
 ## Parameters

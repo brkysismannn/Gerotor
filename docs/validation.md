@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **246 pass · 0 fail · 3 known** (249 tests, ~135 s).
+Last run: 2026-10-23 — **252 pass · 0 fail · 3 known** (255 tests, ~135 s).
 
 ## Change log of the numerical core
 
@@ -316,6 +316,22 @@ coefficients from js/friction.js, reads outlet/inlet pressure), `PumpMechShaft` 
 | Network: shaft torque incl. losses vs browser (25.95 pressure + 1.646 friction) | 27.595 vs 27.59 N·m |
 | `checkModel` of the network system | 250 equations / 250 variables |
 | In-browser: one chamber + one tip gap per lobe; friction block reproduces M_shaft − M_pressure (balanced and single-sided) | exact |
+
+**Viscosity–temperature coupling (`FluidProperties`, the GT "VisSensor").** `inner fluid` computes
+ν(T) by ASTM D341 with the Walther A, B of the selected oil (preset or datasheet fit; 'custom' oil → constant),
+ρ(T) = ρ15(1 − α(T − 15)) and μ = νρ; parameter `T_oil` or an optional temperature input. All laminar gap
+conductances (tip gaps, axial gaps, port lands) are scaled by μ_ref/μ, the viscous friction by μ/μ_ref, the
+orifices use ρ(T). `cases.mos` overrides `T_oil` per case.
+
+| Check (ISO VG 32, design at 40 °C, run at 80 °C) | Browser model (recomputed at 80 °C) | OpenModelica (T_oil = 80) | Difference |
+|---|---|---|---|
+| ν(80 °C) | 8.5332 cSt | 8.5332 cSt | 0 |
+| Delivered flow at the same mean Δp (64.88 bar; 1 L outlet volume, ripple ±0.8 %) | 17.3267 L/min | 17.3227 L/min | −0.02 % |
+| Pressure torque at Δp 67.07 bar | 17.232 N·m | 17.229 N·m | −0.02 % |
+| Shaft torque incl. losses | 17.743 N·m | 17.679 N·m | −0.4 % (journal-bearing eccentricity kept at the 40 °C value) |
+
+With a 1 cm³ outlet volume the outlet pressure pulsated ±15 % and the mean delivered flow differed by 2.6 % — a real
+two-way effect of a stiff outlet; the port volumes are therefore now port area × rotor width (GDS port depth).
 
 Compile ≈ 19 s, simulation ≈ 2 s. Differences in the model: cavitation by a smooth bulk-modulus drop instead
 of a void volume; orifice √ regularised below 100 Pa; outlet pressure two-way coupled (the browser ripple
