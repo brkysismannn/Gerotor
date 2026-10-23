@@ -6,12 +6,12 @@
     N: 7, e: 3, R: 30, rp: 8, c: 0.03, Rv: 28, RvAuto: true, RvClear: 0.5, fillet: 0,
     b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100,
     portsOn: true, portRo: 28, portRoAuto: true, portRi: 19, portRiAuto: true,
-    sucStart: 0, sucEnd: 0, delStart: 0, delEnd: 0, doubleFill: false,
+    sucStart: 0, sucEnd: 0, delStart: 0, delEnd: 0, portLayout: 'shadow',
     gSucStart: 0, gSucEnd: 0, gDelStart: 0, gDelEnd: 0, grooveW: 1,
     pIn: 1, pVap: 0.2, rho: 860, bulk: 1400, Cd: 0.7, nu: 30,
     leakOn: true, axialClr: 0.05, shaftVent: true, tipGapModel: 'backlash',
     Ein: 210, nuIn: 0.3, Eout: 210, nuOut: 0.3,
-    odClr: 0.15, jbLen: 0, jbClr: 0.04, faceSupport: 'balanced', faceMu: 0.08,
+    odClr: 0.15, jbLen: 0, jbClr: 0.04, faceMu: 0.08,
     oil: 'custom', oilT: 40,
   };
   const STORE_KEY = 'gerotor.params.v1';
@@ -48,10 +48,18 @@
     try { localStorage.setItem(STORE_KEY, JSON.stringify(p)); } catch (_) { /* storage unavailable */ }
   }
 
+  // Older parameter files: doubleFill / faceSupport → portLayout.
+  function migrate(s) {
+    if (s && !s.portLayout && ('doubleFill' in s || 'faceSupport' in s)) {
+      s.portLayout = s.doubleFill ? 'double' : (s.faceSupport === 'single' ? 'single' : 'shadow');
+    }
+    return s;
+  }
+
   function restore() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY));
-      if (s && typeof s === 'object') return Object.assign({}, DEFAULTS, s);
+      if (s && typeof s === 'object') return Object.assign({}, DEFAULTS, migrate(s));
     } catch (_) { /* ignore */ }
     return Object.assign({}, DEFAULTS);
   }
@@ -320,7 +328,7 @@
     if (!file) return;
     file.text().then(txt => {
       try {
-        writeForm(Object.assign({}, DEFAULTS, JSON.parse(txt)));
+        writeForm(Object.assign({}, DEFAULTS, migrate(JSON.parse(txt))));
         renderer.fitted = false;
         recompute();
       } catch (err) {

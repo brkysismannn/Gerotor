@@ -354,6 +354,14 @@
   function derive(p) {
     const Rv = p.RvAuto ? p.R + 2 * p.e - p.rp + p.RvClear : p.Rv;
     const q = Object.assign({}, p, { Rv });
+    // Port arrangement (GDS terms) → internal flags:
+    //   single: ports on one face, rotors pressed to the housing floor (floor friction);
+    //   shadow: one-sided ports + shallow shadow ports opposite, rotors balanced;
+    //   double: ports on both faces (double orifice area), rotors balanced.
+    if (p.portLayout) {
+      q.doubleFill = p.portLayout === 'double';
+      q.faceSupport = p.portLayout === 'single' ? 'single' : 'balanced';
+    }
     const innerRoot = p.R - p.e - p.rp - p.c;
     return Object.assign(q, {
       innerTip: p.R + p.e - p.rp - p.c,

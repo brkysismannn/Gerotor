@@ -171,7 +171,12 @@
           </div>
           <label>Groove width <span class="unit">mm</span>
             <input name="grooveW" type="number" min="0" step="0.1" value="1"></label>
-          <label class="inline"><input name="doubleFill" type="checkbox"> Double fill (ports on both faces)</label>
+          <label>Port arrangement
+            <select name="portLayout">
+              <option value="single">One-sided (rotors pressed to floor)</option>
+              <option value="shadow" selected>One-sided + shadow ports (balanced)</option>
+              <option value="double">Double-sided (ports on both faces)</option>
+            </select></label>
         </fieldset>
         <fieldset>
           <legend>Fluid</legend>
@@ -224,12 +229,7 @@
               <input name="jbLen" type="number" min="0" step="1" value="0"></label>
             <label>Bearing clearance (diam.) <span class="unit">mm</span>
               <input name="jbClr" type="number" min="0" step="0.005" value="0.04"></label>
-            <label>Axial support
-              <select name="faceSupport">
-                <option value="balanced">Balanced (shadow / double ports)</option>
-                <option value="single">Single-sided (pressed to floor)</option>
-              </select></label>
-            <label>Floor friction coeff. μ
+            <label>Floor friction μ (one-sided ports)
               <input name="faceMu" type="number" min="0" step="0.01" value="0.08"></label>
           </div>
         </fieldset>

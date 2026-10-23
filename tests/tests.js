@@ -737,6 +737,13 @@
     check(S, 'Single-sided: lower η_v and η_m than balanced', sgl.ports.portEfficiency < bal.ports.portEfficiency && sgl.mech.etaM < bal.mech.etaM);
     const dbl = G.analyse(design(Object.assign({}, base, { faceSupport: 'single', doubleFill: true })));
     check(S, 'Double-sided ports override single-sided support (rotors balanced)', !dbl.mech.single && dbl.mech.MoutFloor === 0);
+    // Port arrangement select (GDS terms) → internal flags.
+    const lay = l => design(Object.assign({}, base, { portLayout: l }));
+    check(S, 'Port arrangement "single" = one face, rotors pressed to floor', lay('single').faceSupport === 'single' && !lay('single').doubleFill);
+    check(S, 'Port arrangement "shadow" = one face, balanced', lay('shadow').faceSupport === 'balanced' && !lay('shadow').doubleFill);
+    check(S, 'Port arrangement "double" = ports on both faces, balanced', lay('double').faceSupport === 'balanced' && lay('double').doubleFill);
+    record(S, 'Port arrangement "single" reproduces the single-sided result (shaft torque)', sgl.mech.Mshaft,
+      G.analyse(design(Object.assign({}, base, { portLayout: 'single', faceMu: 0.1 }))).mech.Mshaft, 1e-9);
 
     // GDS cavitation limits.
     const lim = G.gdsCavitationLimits(p, bal);

@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **194 pass · 0 fail · 3 known** (197 tests, ~110 s).
+Last run: 2026-10-23 — **198 pass · 0 fail · 3 known** (201 tests, ~110 s).
 
 ## Change log of the numerical core
 
@@ -191,6 +191,7 @@ circumferential clearance = axial clearance (GDS assumption) → odClr.
 | Miniature: drive torque 1500 rpm, 50 bar, single-sided ports, μ 0.04 | 0.48 N·m measured (GDS 0.55) | 0.453 | −5.7 % |
 | Single-sided support: viscous face drag ¼ of balanced (GDS: balanced ×4); face leakage ×4 | — | exact | 0 |
 | Floor friction μ·(Δp·A/2)·R_eff; double-sided ports override single-sided support | — | exact | 0 |
+| Port arrangement select (one-sided / + shadow / double-sided) maps to the support and fill flags; one-sided reproduces the single-sided result | — | exact | 0 |
 | GDS cavitation criteria: ½ρ(r_tip·ω)² = p_in − p_vap; inlet gallery Re = 2000 | — | exact | 0 |
 | Shaft side load: zero with equal chamber pressures | 0 N | 1·10⁻¹¹ N | — |
 | Side load direction (quasi-static, delivery in the lower half) | 90° | 90.04° | 0.04° |

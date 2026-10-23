@@ -34,8 +34,9 @@ No installation: open `index.html` in a browser.
   in opening areas, pressure model, cross-porting check, drawing and DXF/SVG export.
 - **Filling-limited max speed:** highest speed with chamber void ≤ 0.5 % (bisection on the network model), the
   speed where the inlet port velocity reaches 2 m/s, and the GDS criteria (tip dynamic pressure, inlet gallery Re).
-- **Axial support:** balanced (shadow / double-sided ports) or single-sided (rotors pressed to the housing floor:
-  Coulomb floor friction, whole axial clearance on the port face) — as in the GDS power model.
+- **Port arrangement:** one-sided (rotors pressed to the housing floor: Coulomb floor friction, whole axial
+  clearance on the port face), one-sided + shadow ports (balanced) or double-sided (ports on both faces: double
+  orifice area and port-land leakage, balanced) — as in the GDS power model.
 - **Shaft side load:** radial load on the shaft from chamber pressures and the tooth contact (magnitude, angle).
 - **Benchmarks against real pumps:** Bosch Rexroth PGZ4-80 (flow −3 %, drive power +0.6 %) and the Mancò 2002
   miniature gerotor (drive torque −6 %); see `docs/validation.md` §18.
