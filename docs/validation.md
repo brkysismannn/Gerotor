@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **271 pass · 0 fail · 3 known** (274 tests, ~140 s).
+Last run: 2026-10-23 — **281 pass · 0 fail · 3 known** (284 tests, ~140 s).
 
 ## Change log of the numerical core
 
@@ -345,9 +345,29 @@ eccentricity, profile-data table (N, e, R, r_p, c, R_v, b, λ, displacement, max
 largest standard scale with the outer rotor ≤ 115 mm. Checked: PDF header/trailer, every xref offset points to
 its object, stream length, dimension texts present; rendered with pdf.js and inspected.
 
-**STEP AP242** (ISO 10303-242 MIM LF): per rotor a `MANIFOLD_SOLID_BREP` — planar top/bottom faces with inner
-bounds, one planar side face per profile segment (faceted, fine resolution); product structure, mm units,
+**STEP AP242** (ISO 10303-242 MIM LF): per rotor a `MANIFOLD_SOLID_BREP`; product structure, mm units,
 1e-7 uncertainty; scope outer / inner / assembly (two solids, inner rotor at x = e).
+- **Exact mode (default):** outer rotor, OD and bore as true `CIRCLE` edges / `CYLINDRICAL_SURFACE` faces (lobe,
+  fillet and valley arcs of the analytical profile); inner profile as one cubic B-spline per tooth (global
+  interpolation with end derivatives, Piegl & Tiller §9.2.2, G1 joints) on `SURFACE_OF_LINEAR_EXTRUSION`
+  faces, refined until the deviation is ≤ 2 µm. Files: 21 kB (outer), 60 kB (inner).
+- **Facet mode:** one planar side face per segment (tolerance-driven, 2 µm).
+
+**Import check in FreeCAD 1.1.4 (OpenCascade)** — `tools/check_step.py`, default design:
+
+| File | Shape | isValid / closed / check | Faces (types) | Volume FreeCAD | Exact volume | Difference |
+|---|---|---|---|---|---|---|
+| exact outer | Solid | ✓ / ✓ / ok | 20 (Cylinder, Plane) | 59 464.0461 | 59 464.0461 | 0 |
+| exact outer, fillets 1.5 | Solid | ✓ / ✓ / ok | 34 (Cylinder, Plane) | 59 564.2957 | 59 564.2957 | 0 |
+| exact inner (bore) | Solid | ✓ / ✓ / ok | 12 (SurfaceOfExtrusion, Cylinder, Plane) | 25 387.49 | 25 357.36 | +0.12 % * |
+| exact inner, no bore | Solid | ✓ / ✓ / ok | 8 | 30 476.87 | 30 446.74 | +0.10 % * |
+| exact assembly | Compound of 2 solids | ✓ / ✓ / ok | 20 + 12 | as above | | |
+| facet outer / inner / assembly | Solid(s) | ✓ / ✓ / ok | 849 / 614 planes | 59 455.87 / 25 358.68 | | −0.014 % / +0.005 % (chords) |
+
+\* The cross-section of the imported inner rotor is exact (bottom face area 1522.345 mm² vs 1522.337 mm² of a
+200 000-point profile; spline deviation ≤ 0.4 µm); FreeCAD's **own** extrusion of that face gives the identical
+volume 30 476.87 mm³ and side area 3238.913 mm², i.e. the +0.1 % is OpenCascade's numerical volume integration
+over B-spline extrusion faces, not the exported geometry.
 
 | Check (default design) | Result |
 |---|---|
@@ -361,9 +381,9 @@ bounds, one planar side face per profile segment (faceted, fine resolution); pro
 A first version sampled the profile uniformly in the trochoid parameter (720 facets): the facet deviation reached
 13.8 µm at the tooth root, where the offset profile moves fastest — replaced by the tolerance-driven facets.
 
-Not yet verified by importing into a CAD kernel (no CAD system on this machine); the faceted side faces are
-exact to the profile polylines. Planned: B-spline side faces (exact surfaces) once a STEP reader is available
-for validation.
+In-browser tests (suite 23) additionally check the exact mode: no dangling references, closed shells and
+Euler–Poincaré, face/surface types, arcs of the outer profile joined end to end (with fillets), spline
+deviation ≤ 2 µm, and the interpolation itself (data points to 2e-16, prescribed end tangent).
 
 ## 6. Export
 

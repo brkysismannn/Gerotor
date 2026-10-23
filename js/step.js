@@ -71,6 +71,22 @@
     return keep;
   }
 
+  // Exact regions: arcs (outer rotor, OD, bore) and B-splines (inner profile) as segment loops.
+  function exactRegions(p, scope, tol) {
+    tol = tol || DEFAULT_TOL;
+    const out = [];
+    if (scope !== 'inner') {
+      out.push({ name: 'OuterRotor', outer: orientSegs(circleSegs([0, 0], p.OD / 2), true), holes: [orientSegs(outerProfileSegs(p), false)], dx: 0 });
+    }
+    if (scope !== 'outer') {
+      const prof = innerProfileSegs(p, tol);
+      const holes = p.bore > 0 ? [orientSegs(circleSegs([0, 0], p.bore / 2), false)] : [];
+      const outer = orientSegs(prof, true);
+      out.push({ name: 'InnerRotor', outer, holes, dx: scope === 'assembly' ? p.e : 0, maxDev: prof.maxDev, ctrlCount: prof.ctrlCount });
+    }
+    return out;
+  }
+
   // Planar regions of the parts: { name, outer: [...], holes: [[...]] } (mm, part coordinates).
   function regions(p, scope, res, tol) {
     tol = tol || DEFAULT_TOL;
@@ -102,45 +118,243 @@
     return { lines, add, dir, pt, get count() { return id; } };
   }
 
-  // Solid of one region extruded over z = 0 … h; returns the MANIFOLD_SOLID_BREP id.
+  // ------------------------------------------------------------------ exact profile segments
+  //
+  // A loop is a list of segments { a, b, kind: 'line' | 'arc' | 'spline', … } with b of one segment
+  // = a of the next. arc: centre c, radius r, ccw (traversal a → b counter-clockwise about +z).
+  // spline: clamped cubic B-spline { ctrl, knots } parameterised along the traversal.
+
+  const linesFromPts = pts => pts.map((a, i) => ({ kind: 'line', a, b: pts[(i + 1) % pts.length] }));
+
+  function reverseLoop(segs) {
+    return segs.slice().reverse().map(s => {
+      const r = Object.assign({}, s, { a: s.b, b: s.a });
+      if (s.kind === 'arc') r.ccw = !s.ccw;
+      if (s.kind === 'spline') { r.ctrl = s.ctrl.slice().reverse(); r.knots = s.knots.slice().reverse().map(u => 1 - u); }
+      return r;
+    });
+  }
+
+  // Sample points of a segment (for orientation / checks).
+  function segPoints(s, n) {
+    if (s.kind === 'line') return [s.a];
+    if (s.kind === 'arc') {
+      const t0 = Math.atan2(s.a[1] - s.c[1], s.a[0] - s.c[0]);
+      let d = Math.atan2(s.b[1] - s.c[1], s.b[0] - s.c[0]) - t0;
+      if (s.ccw && d <= 0) d += TAU; if (!s.ccw && d >= 0) d -= TAU;
+      return Array.from({ length: n }, (_, i) => [s.c[0] + s.r * Math.cos(t0 + d * i / n), s.c[1] + s.r * Math.sin(t0 + d * i / n)]);
+    }
+    return Array.from({ length: n }, (_, i) => bsplinePoint(s, i / n));
+  }
+  const loopArea = segs => signedArea(segs.flatMap(s => segPoints(s, 16)));
+  const orientSegs = (segs, ccw) => (loopArea(segs) > 0) === ccw ? segs : reverseLoop(segs);
+
+  // Arc segment from polar angle t0 swept by d about centre c.
+  const arcSeg = (c, r, t0, d) => ({ kind: 'arc', c, r, ccw: d > 0,
+    a: [c[0] + r * Math.cos(t0), c[1] + r * Math.sin(t0)], b: [c[0] + r * Math.cos(t0 + d), c[1] + r * Math.sin(t0 + d)] });
+
+  // Full circle as four quarter arcs.
+  const circleSegs = (c, r) => [0, 1, 2, 3].map(i => arcSeg(c, r, i * Math.PI / 2, Math.PI / 2));
+
+  // Outer rotor lobed profile as exact arcs: lobe, fillet, valley, fillet per pitch.
+  function outerProfileSegs(p) {
+    const L = G.lobeLimits(p), segs = [], rot = (q, a) => [q[0] * Math.cos(a) - q[1] * Math.sin(a), q[0] * Math.sin(a) + q[1] * Math.cos(a)];
+    for (let k = 0; k < p.N; k++) {
+      const th = TAU * k / p.N, C = [p.R * Math.cos(th), p.R * Math.sin(th)];
+      // Lobe k: point at ψ sits at circle angle α = θ − ψ + π; ψ from −ψmax to +ψmax.
+      segs.push(arcSeg(C, p.rp, th + L.psiMax + Math.PI, -2 * L.psiMax));
+      if (L.fillets) { const f = L.fillets[0]; segs.push(arcSeg(rot(f.c, th), p.fillet, f.a0 + th, f.d)); }
+      if (L.hasValley) segs.push(arcSeg([0, 0], p.Rv, th + L.beta, TAU / p.N - 2 * L.beta));
+      if (L.fillets) { const f = L.fillets[1]; segs.push(arcSeg(rot(f.c, th), p.fillet, f.a0 + th, f.d)); }
+    }
+    // Snap consecutive end/start points (they coincide analytically).
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i], t = segs[(i + 1) % segs.length];
+      if (Math.hypot(s.b[0] - t.a[0], s.b[1] - t.a[1]) > 1e-6) throw new Error('outer profile arcs do not join');
+      t.a = s.b;
+    }
+    return segs;
+  }
+
+  // ---- cubic B-spline interpolation with end derivatives (Piegl & Tiller §9.2.2)
+
+  function basis(U, u) {                     // all cubic basis functions at u (clamped knots)
+    const m = U.length - 1, nCtrl = m - 3, N = new Float64Array(nCtrl);
+    let span = 3;
+    if (u >= U[nCtrl]) span = nCtrl - 1;
+    else while (span < nCtrl - 1 && !(u >= U[span] && u < U[span + 1])) span++;
+    const left = [0, 0, 0, 0], right = [0, 0, 0, 0], Nl = [1, 0, 0, 0];
+    for (let j = 1; j <= 3; j++) {
+      left[j] = u - U[span + 1 - j]; right[j] = U[span + j] - u;
+      let saved = 0;
+      for (let r = 0; r < j; r++) {
+        const tmp = Nl[r] / (right[r + 1] + left[j - r]);
+        Nl[r] = saved + right[r + 1] * tmp; saved = left[j - r] * tmp;
+      }
+      Nl[j] = saved;
+    }
+    for (let j = 0; j <= 3; j++) N[span - 3 + j] = Nl[j];
+    return N;
+  }
+
+  function bsplinePoint(s, u) {
+    const N = basis(s.knots, Math.min(Math.max(u, 0), 1));
+    let x = 0, y = 0;
+    for (let j = 0; j < N.length; j++) if (N[j]) { x += N[j] * s.ctrl[j][0]; y += N[j] * s.ctrl[j][1]; }
+    return [x, y];
+  }
+
+  function solveDense(A, B) {                // Gaussian elimination with partial pivoting; B: columns
+    const n = A.length;
+    for (let c = 0; c < n; c++) {
+      let piv = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+      [A[c], A[piv]] = [A[piv], A[c]]; [B[c], B[piv]] = [B[piv], B[c]];
+      for (let r = c + 1; r < n; r++) {
+        const f = A[r][c] / A[c][c];
+        if (!f) continue;
+        for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
+        for (let k = 0; k < B[r].length; k++) B[r][k] -= f * B[c][k];
+      }
+    }
+    const X = B.map(row => row.slice());
+    for (let r = n - 1; r >= 0; r--) {
+      for (let k = 0; k < X[r].length; k++) {
+        let s = X[r][k];
+        for (let c = r + 1; c < n; c++) s -= A[r][c] * X[c][k];
+        X[r][k] = s / A[r][r];
+      }
+    }
+    return X;
+  }
+
+  function interpolate(Q, D0, Dn) {
+    const n = Q.length - 1, ub = [0];
+    let total = 0;
+    for (let k = 1; k <= n; k++) total += Math.hypot(Q[k][0] - Q[k - 1][0], Q[k][1] - Q[k - 1][1]);
+    for (let k = 1; k <= n; k++) ub.push(ub[k - 1] + Math.hypot(Q[k][0] - Q[k - 1][0], Q[k][1] - Q[k - 1][1]) / total);
+    ub[n] = 1;
+    const U = [0, 0, 0, 0, ...ub.slice(1, n), 1, 1, 1, 1];
+    const m = n + 3, P = new Array(m);
+    P[0] = Q[0]; P[m - 1] = Q[n];
+    P[1] = [Q[0][0] + U[4] / 3 * D0[0] * total, Q[0][1] + U[4] / 3 * D0[1] * total];
+    P[m - 2] = [Q[n][0] - (1 - U[n + 2]) / 3 * Dn[0] * total, Q[n][1] - (1 - U[n + 2]) / 3 * Dn[1] * total];
+    // Rows k = 1 … n−1 for the unknowns P[2] … P[n].
+    const A = [], B = [];
+    for (let k = 1; k <= n - 1; k++) {
+      const N = basis(U, ub[k]), row = new Array(n - 1).fill(0);
+      let bx = Q[k][0], by = Q[k][1];
+      for (let j = 0; j < m; j++) {
+        if (!N[j]) continue;
+        if (j >= 2 && j <= n) row[j - 2] = N[j];
+        else { bx -= N[j] * P[j][0]; by -= N[j] * P[j][1]; }
+      }
+      A.push(row); B.push([bx, by]);
+    }
+    if (n >= 2) solveDense(A, B).forEach((x, i) => { P[i + 2] = x; });
+    return { kind: 'spline', ctrl: P, knots: U, a: Q[0], b: Q[n] };
+  }
+
+  // Inner rotor profile: one interpolating cubic B-spline per tooth (G1 joints), refined until the
+  // deviation from a dense reference profile is ≤ tol.
+  function innerProfileSegs(p, tol) {
+    const off = p.rp + p.c, teeth = p.N - 1, per = TAU / teeth;
+    const tangent = phi => {
+      const e = 1e-6, a = G.innerPoint(p, phi - e, off), b = G.innerPoint(p, phi + e, off);
+      const d = [b[0] - a[0], b[1] - a[1]], L = Math.hypot(d[0], d[1]);
+      return [d[0] / L, d[1] / L];
+    };
+    const segs = [];
+    let maxDev = 0, ctrlCount = 0;
+    for (let j = 0; j < teeth; j++) {
+      const ph0 = per * j, ph1 = per * (j + 1);
+      const ref = Array.from({ length: 1201 }, (_, i) => G.innerPoint(p, ph0 + (ph1 - ph0) * i / 1200, off));
+      let seg = null, dev = Infinity;
+      for (let K = 24; K <= 1200 && dev > tol; K *= 2) {
+        const Q = Array.from({ length: K + 1 }, (_, i) => ref[Math.round(i * 1200 / K)]);
+        seg = interpolate(Q, tangent(ph0), tangent(ph1));
+        // Deviation: reference points vs a fine polyline of the spline (local nearest segment).
+        const S = Array.from({ length: 12 * K + 1 }, (_, i) => bsplinePoint(seg, i / (12 * K)));
+        dev = 0;
+        let ptr = 0;
+        for (const q of ref) {
+          let best = Infinity;
+          for (let k = Math.max(0, ptr - 30); k < Math.min(S.length - 1, ptr + 60); k++) {
+            const a = S[k], b = S[k + 1], t = [b[0] - a[0], b[1] - a[1]], L2 = t[0] * t[0] + t[1] * t[1];
+            const u = L2 > 0 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * t[0] + (q[1] - a[1]) * t[1]) / L2)) : 0;
+            const dd = Math.hypot(q[0] - a[0] - u * t[0], q[1] - a[1] - u * t[1]);
+            if (dd < best) { best = dd; ptr = k; }
+          }
+          dev = Math.max(dev, best);
+        }
+      }
+      maxDev = Math.max(maxDev, dev);
+      ctrlCount += seg.ctrl.length;
+      segs.push(seg);
+    }
+    for (let i = 0; i < segs.length; i++) segs[(i + 1) % segs.length].a = segs[i].b;   // shared joint points
+    segs.maxDev = maxDev; segs.ctrlCount = ctrlCount;
+    return segs;
+  }
+
+  // Solid of one region (loops of segments) extruded over z = 0 … h; returns the MANIFOLD_SOLID_BREP id.
   function solid(w, reg, h) {
     const dx = reg.dx || 0;
-    const loops = [reg.outer, ...reg.holes];
+    const loops = [reg.outer, ...reg.holes].map(l => Array.isArray(l[0]) ? linesFromPts(l) : l);
     const faces = [];
     const zD = w.dir(0, 0, 1), zDn = w.dir(0, 0, -1), xD = w.dir(1, 0, 0);
+    const P3 = (q, z) => [q[0] + dx, q[1], z];
+    const lineCurve = (A, B) => {
+      const d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], len = Math.hypot(...d);
+      return w.add(`LINE('',#${w.pt(...A)},#${w.add(`VECTOR('',#${w.dir(d[0] / len, d[1] / len, d[2] / len)},${fmt(len)})`)})`);
+    };
+    const curveAt = (s, z) => {
+      if (s.kind === 'line') return { id: lineCurve(P3(s.a, z), P3(s.b, z)), sense: true };
+      if (s.kind === 'arc') {
+        const ax = w.add(`AXIS2_PLACEMENT_3D('',#${w.pt(s.c[0] + dx, s.c[1], z)},#${zD},#${xD})`);
+        return { id: w.add(`CIRCLE('',#${ax},${fmt(s.r)})`), sense: s.ccw };
+      }
+      const pts = s.ctrl.map(q => '#' + w.pt(q[0] + dx, q[1], z)).join(',');
+      const uniq = [], mult = [];
+      for (const u of s.knots) { if (uniq.length && Math.abs(u - uniq[uniq.length - 1]) < 1e-14) mult[mult.length - 1]++; else { uniq.push(u); mult.push(1); } }
+      return { id: w.add(`B_SPLINE_CURVE_WITH_KNOTS('',3,(${pts}),.UNSPECIFIED.,.F.,.F.,(${mult.join(',')}),(${uniq.map(fmt).join(',')}),.UNSPECIFIED.)`), sense: true };
+    };
     // Vertices and edges per loop.
-    const L = loops.map(pts => {
-      const n = pts.length;
-      const vb = [], vt = [];
-      for (const q of pts) {
-        vb.push(w.add(`VERTEX_POINT('',#${w.pt(q[0] + dx, q[1], 0)})`));
-        vt.push(w.add(`VERTEX_POINT('',#${w.pt(q[0] + dx, q[1], h)})`));
+    const L = loops.map(segs => {
+      const n = segs.length, vb = [], vt = [];
+      for (const s of segs) {
+        vb.push(w.add(`VERTEX_POINT('',#${w.pt(...P3(s.a, 0))})`));
+        vt.push(w.add(`VERTEX_POINT('',#${w.pt(...P3(s.a, h))})`));
       }
-      const lineE = (a, b, A, B) => {
-        const d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], len = Math.hypot(...d);
-        const ln = w.add(`LINE('',#${w.pt(...A)},#${w.add(`VECTOR('',#${w.dir(d[0] / len, d[1] / len, d[2] / len)},${fmt(len)})`)})`);
-        return w.add(`EDGE_CURVE('',#${a},#${b},#${ln},.T.)`);
-      };
-      const eb = [], et = [], ev = [];
+      const eb = [], et = [], ev = [], cb = [];
       for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n, P = pts[i], Q = pts[j];
-        eb.push(lineE(vb[i], vb[j], [P[0] + dx, P[1], 0], [Q[0] + dx, Q[1], 0]));
-        et.push(lineE(vt[i], vt[j], [P[0] + dx, P[1], h], [Q[0] + dx, Q[1], h]));
-        ev.push(lineE(vb[i], vt[i], [P[0] + dx, P[1], 0], [P[0] + dx, P[1], h]));
+        const j = (i + 1) % n, s = segs[i];
+        const b = curveAt(s, 0), t = curveAt(s, h);
+        cb.push(b.id);
+        eb.push(w.add(`EDGE_CURVE('',#${vb[i]},#${vb[j]},#${b.id},${b.sense ? '.T.' : '.F.'})`));
+        et.push(w.add(`EDGE_CURVE('',#${vt[i]},#${vt[j]},#${t.id},${t.sense ? '.T.' : '.F.'})`));
+        ev.push(w.add(`EDGE_CURVE('',#${vb[i]},#${vt[i]},#${lineCurve(P3(s.a, 0), P3(s.a, h))},.T.)`));
       }
-      return { pts, n, eb, et, ev };
+      return { segs, n, eb, et, ev, cb };
     });
     const oe = (e, sense) => w.add(`ORIENTED_EDGE('',*,*,#${e},${sense ? '.T.' : '.F.'})`);
-    // Side faces.
+    // Side faces: plane (line), cylinder (arc), linear extrusion (B-spline).
     for (const lp of L) {
       for (let i = 0; i < lp.n; i++) {
-        const j = (i + 1) % lp.n, P = lp.pts[i], Q = lp.pts[j];
-        const d = [Q[0] - P[0], Q[1] - P[1]], len = Math.hypot(d[0], d[1]);
-        const nrm = [d[1] / len, -d[0] / len];             // outward for CCW outer loops and CW holes
-        const ax = w.add(`AXIS2_PLACEMENT_3D('',#${w.pt(P[0] + dx, P[1], 0)},#${w.dir(nrm[0], nrm[1], 0)},#${w.dir(d[0] / len, d[1] / len, 0)})`);
-        const plane = w.add(`PLANE('',#${ax})`);
+        const j = (i + 1) % lp.n, s = lp.segs[i];
+        let surf, same = true;
+        if (s.kind === 'line') {
+          const d = [s.b[0] - s.a[0], s.b[1] - s.a[1]], len = Math.hypot(d[0], d[1]);
+          const nrm = [d[1] / len, -d[0] / len];           // outward for CCW outer loops and CW holes
+          surf = w.add(`PLANE('',#${w.add(`AXIS2_PLACEMENT_3D('',#${w.pt(...P3(s.a, 0))},#${w.dir(nrm[0], nrm[1], 0)},#${w.dir(d[0] / len, d[1] / len, 0)})`)})`);
+        } else if (s.kind === 'arc') {
+          surf = w.add(`CYLINDRICAL_SURFACE('',#${w.add(`AXIS2_PLACEMENT_3D('',#${w.pt(s.c[0] + dx, s.c[1], 0)},#${zD},#${xD})`)},${fmt(s.r)})`);
+          same = s.ccw;                                     // outward normal = radial outward iff traversed CCW
+        } else {
+          surf = w.add(`SURFACE_OF_LINEAR_EXTRUSION('',#${lp.cb[i]},#${w.add(`VECTOR('',#${zD},${fmt(h)})`)})`);
+        }
         const loop = w.add(`EDGE_LOOP('',(#${oe(lp.eb[i], true)},#${oe(lp.ev[j], true)},#${oe(lp.et[i], false)},#${oe(lp.ev[i], false)}))`);
-        faces.push(w.add(`ADVANCED_FACE('',(#${w.add(`FACE_OUTER_BOUND('',#${loop},.T.)`)}),#${plane},.T.)`));
+        faces.push(w.add(`ADVANCED_FACE('',(#${w.add(`FACE_OUTER_BOUND('',#${loop},.T.)`)}),#${surf},${same ? '.T.' : '.F.'})`));
       }
     }
     // Top (+z) and bottom (−z) faces with inner bounds.
@@ -179,7 +393,8 @@
     const unc = w.add(`UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-07),#${mm},'distance_accuracy_value','confusion accuracy')`);
     const ctx = w.add(`(GEOMETRIC_REPRESENTATION_CONTEXT(3) GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#${unc})) GLOBAL_UNIT_ASSIGNED_CONTEXT((#${mm},#${rad},#${sr})) REPRESENTATION_CONTEXT('Context3D','3D Context with UNIT and UNCERTAINTY'))`);
     const origin = w.add(`AXIS2_PLACEMENT_3D('',#${w.pt(0, 0, 0)},#${w.dir(0, 0, 1)},#${w.dir(1, 0, 0)})`);
-    const solids = regions(p, scope, res, opt.tol).map(r => solid(w, r, p.b));
+    const regs = opt.mode === 'facet' ? regions(p, scope, res, opt.tol) : exactRegions(p, scope, opt.tol);
+    const solids = regs.map(r => solid(w, r, p.b));
     const rep = w.add(`ADVANCED_BREP_SHAPE_REPRESENTATION(${strq(name)},(#${origin},${solids.map(s => '#' + s).join(',')}),#${ctx})`);
     w.add(`SHAPE_DEFINITION_REPRESENTATION(#${pds},#${rep})`);
 
@@ -246,5 +461,6 @@
     return { entities: ent.size, missingRefs: missing, shells };
   }
 
-  G.step = { stepFile, checkStep, regions, signedArea, simplifyClosed, DEFAULT_TOL };
+  G.step = { stepFile, checkStep, regions, exactRegions, signedArea, simplifyClosed, DEFAULT_TOL,
+    interpolate, bsplinePoint, outerProfileSegs, innerProfileSegs, segPoints, loopArea };
 })(window.Gerotor);

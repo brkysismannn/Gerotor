@@ -71,6 +71,28 @@ function Handle-Modelica($ctx) {
   Send-Json $ctx 200 $result
 }
 
+# POST /api/save  { files: { "<name>": "<text>" }, base64: { "<name>": "<b64>" } } → <repo>/exports/
+function Handle-Save($ctx) {
+  $req = $ctx.Request
+  $origin = $req.Headers['Origin']
+  if ($req.Headers['X-Gerotor-Request'] -ne '1' -or ($origin -and $origin -ne "http://localhost:$Port")) {
+    Send-Json $ctx 403 @{ ok = $false; error = 'forbidden' }; return
+  }
+  $reader = New-Object IO.StreamReader($req.InputStream, [Text.Encoding]::UTF8)
+  $body = $reader.ReadToEnd() | ConvertFrom-Json
+  $dir = Join-Path $RepoRoot 'exports'
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  $written = @()
+  $ok = '\.(step|stp|pdf|dxf|svg|csv|xlsx|txt)$'
+  if ($body.files) { foreach ($prop in $body.files.PSObject.Properties) {
+    $fname = ($prop.Name -replace '[^A-Za-z0-9_.-]', '_'); if ($fname -notmatch $ok) { continue }
+    $path = Join-Path $dir $fname; [IO.File]::WriteAllText($path, [string]$prop.Value, (New-Object Text.UTF8Encoding($false))); $written += $path } }
+  if ($body.base64) { foreach ($prop in $body.base64.PSObject.Properties) {
+    $fname = ($prop.Name -replace '[^A-Za-z0-9_.-]', '_'); if ($fname -notmatch $ok) { continue }
+    $path = Join-Path $dir $fname; [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String([string]$prop.Value)); $written += $path } }
+  Send-Json $ctx 200 @{ ok = $true; dir = $dir; files = $written }
+}
+
 $l = New-Object System.Net.HttpListener
 $l.Prefixes.Add("http://localhost:$Port/")
 $l.Start()
@@ -81,6 +103,8 @@ while ($l.IsListening) {
     $path = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath.TrimStart('/'))
     if ($path -eq 'api/modelica') {
       if ($ctx.Request.HttpMethod -eq 'POST') { Handle-Modelica $ctx } else { $ctx.Response.StatusCode = 405 }
+    } elseif ($path -eq 'api/save') {
+      if ($ctx.Request.HttpMethod -eq 'POST') { Handle-Save $ctx } else { $ctx.Response.StatusCode = 405 }
     } else {
       if ($path -eq '' -or $path.EndsWith('/')) { $path = $path + 'index.html' }
       $file = Join-Path $Root $path

@@ -956,9 +956,35 @@
     check(S, `PDF: dimension and table texts present (${need.length})`, need.every(t => pdf.includes('(' + G.drawing.pdfString(t)) || pdf.includes(G.drawing.pdfString(t))));
     check(S, 'PDF: standard scale chosen so that the outer rotor fits the view (1:1 for OD 80)', pdf.includes('(1:1)'));
 
-    // STEP: references, closed manifold shells, Euler–Poincaré, volume = area × b.
+    // STEP exact mode (default): arcs → circles / cylinders, inner profile → cubic B-splines / extrusions.
     for (const scope of ['outer', 'inner', 'assembly']) {
       const txt = G.step.stepFile(p, r, { scope, date: '2026-01-01T00:00:00' });
+      const ck = G.step.checkStep(txt);
+      const regs = G.step.exactRegions(p, scope);
+      check(S, `STEP exact ${scope}: no dangling #refs; every shell closed (edges used twice, opposite senses); Euler–Poincaré`,
+        ck.missingRefs === 0 && ck.shells.length === regs.length && ck.shells.every((sh, i) => sh.badEdges === 0 && sh.euler === 2 * (1 - regs[i].holes.length)));
+      if (scope === 'outer') check(S, 'STEP exact outer: circle edges and cylindrical faces only (no facets)', /CYLINDRICAL_SURFACE/.test(txt) && !/SURFACE_OF_LINEAR_EXTRUSION/.test(txt) && (txt.match(/ADVANCED_FACE/g) || []).length === 4 + regs[0].holes[0].length + 2);
+      if (scope === 'inner') check(S, `STEP exact inner: ${p.N - 1} B-spline teeth (linear-extrusion faces) + bore cylinders`,
+        (txt.match(/SURFACE_OF_LINEAR_EXTRUSION/g) || []).length === p.N - 1 && (txt.match(/B_SPLINE_CURVE_WITH_KNOTS/g) || []).length === 2 * (p.N - 1));
+    }
+    const segs = G.step.outerProfileSegs(design(Object.assign({}, P, { fillet: 1.5 })));
+    check(S, `Exact outer profile with fillets: ${segs.length} arcs (lobe, fillet, valley, fillet per lobe) joined end to end`, segs.length === 4 * P.N);
+    const sp = G.step.innerProfileSegs(p, 0.002);
+    record(S, `Inner profile B-splines (${sp.ctrlCount} control points): max deviation from the true profile ≤ 2 µm`, 0, sp.maxDev * 1000, 2, { abs: true, unit: 'µm' });
+    // Interpolation with end derivatives reproduces the data points and end tangents.
+    const Q = Array.from({ length: 9 }, (_, i) => [Math.cos(i * 0.2), Math.sin(i * 0.2)]);
+    const s9 = G.step.interpolate(Q, [0, 1], [-Math.sin(1.6), Math.cos(1.6)]);
+    let qerr = 0;
+    const ub = [0]; for (let k = 1; k < 9; k++) ub.push(ub[k - 1] + Math.hypot(Q[k][0] - Q[k - 1][0], Q[k][1] - Q[k - 1][1]));
+    for (let k = 0; k < 9; k++) { const c = G.step.bsplinePoint(s9, ub[k] / ub[8]); qerr = Math.max(qerr, Math.hypot(c[0] - Q[k][0], c[1] - Q[k][1])); }
+    record(S, 'Cubic B-spline interpolation (Piegl & Tiller): passes through the data points', 0, qerr, 1e-9, { abs: true, unit: 'mm' });
+    const d0 = [G.step.bsplinePoint(s9, 1e-6)[0] - Q[0][0], G.step.bsplinePoint(s9, 1e-6)[1] - Q[0][1]];
+    check(S, 'Cubic B-spline interpolation: start tangent = prescribed direction', Math.abs(Math.atan2(d0[1], d0[0]) - Math.PI / 2) < 1e-3);
+    record(S, 'Arc of radius 1 sampled by the spline: radius error', 1, Math.hypot(...G.step.bsplinePoint(s9, 0.37)), 1e-3);
+
+    // STEP facet mode: references, closed manifold shells, Euler–Poincaré, volume = area × b.
+    for (const scope of ['outer', 'inner', 'assembly']) {
+      const txt = G.step.stepFile(p, r, { scope, mode: 'facet', date: '2026-01-01T00:00:00' });
       const ck = G.step.checkStep(txt);
       const regs = G.step.regions(p, scope, r);
       check(S, `STEP ${scope}: AP242 schema, ${ck.entities} entities, no dangling #refs`,

@@ -62,8 +62,9 @@ No installation: open `index.html` in a browser.
   (delivered flow −0.02 … +0.3 %, torque ≈ 0).
 - **Technical drawing (PDF):** A3 sheet with rotor views, diameter dimensions, side views, assembly with
   eccentricity, profile-data table, notes and title block.
-- **STEP AP242:** rotors (or the assembly) as B-rep solids (faceted side faces), checked for closed manifold
-  shells, Euler–Poincaré and volume.
+- **STEP AP242:** rotors (or the assembly) as exact B-rep solids — true circular arcs / cylinders for the outer
+  rotor, OD and bore, cubic B-spline extrusions (≤ 2 µm) for the inner profile; imported as valid closed solids
+  in FreeCAD / OpenCascade (`tools/check_step.py`). A faceted mode is available as well.
 - **Export:** DXF (R12, layered: OUTER_ROTOR, INNER_ROTOR, PORTS), SVG (mm), CSV point cloud; parameters can be saved/loaded as JSON.
 
 ## Parameters
