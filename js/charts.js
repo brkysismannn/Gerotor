@@ -17,10 +17,20 @@
 
   /*
    * opts: { xs, ys | series: [{ ys, color, dash }], xMin, xMax, xTicks, xLabel,
-   *         refY, marker: [x, y], yFromZero }
-   * The marker is drawn on the first series.
+   *         refY, marker: [x, y], yFromZero, yLog, points: [[x, y], …] }
+   * The marker is drawn on the first series; points are drawn as open circles.
+   * yLog: logarithmic y axis (ticks at 1-2-5 per decade).
    */
   function lineChart(canvas, opts) {
+    if (opts.yLog) {
+      const L = v => Math.log10(Math.max(v, 1e-12));
+      opts = Object.assign({}, opts, {
+        yLog: false, logTicks: true,
+        series: (opts.series || [{ ys: opts.ys }]).map(s => Object.assign({}, s, { ys: s.ys.map(L) })),
+        marker: opts.marker && [opts.marker[0], L(opts.marker[1])],
+        points: opts.points && opts.points.map(([x, y]) => [x, L(y)]),
+      });
+    }
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.round(rect.width * dpr);
@@ -47,9 +57,10 @@
 
     ctx.strokeStyle = grid; ctx.fillStyle = text; ctx.lineWidth = 1;
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    for (const v of niceTicks(yMin, yMax, 4)) {
+    const yTicks = opts.logTicks ? logTicks(yMin, yMax) : niceTicks(yMin, yMax, 4);
+    for (const v of yTicks) {
       ctx.beginPath(); ctx.moveTo(pad.l, Y(v)); ctx.lineTo(W - pad.r, Y(v)); ctx.stroke();
-      ctx.fillText(formatTick(v), pad.l - 6, Y(v));
+      ctx.fillText(formatTick(opts.logTicks ? Math.pow(10, v) : v), pad.l - 6, Y(v));
     }
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (const v of opts.xTicks) {
@@ -77,6 +88,13 @@
     }
     ctx.setLineDash([]);
 
+    if (opts.points) {
+      ctx.strokeStyle = text; ctx.lineWidth = 1.5;
+      for (const [px, py] of opts.points) {
+        if (px < xMin || px > xMax) continue;
+        ctx.beginPath(); ctx.arc(X(px), Y(py), 4, 0, 2 * Math.PI); ctx.stroke();
+      }
+    }
     if (opts.marker) {
       const [mx, my] = opts.marker;
       ctx.strokeStyle = text; ctx.lineWidth = 1;
@@ -84,6 +102,15 @@
       ctx.fillStyle = line;
       ctx.beginPath(); ctx.arc(X(mx), Y(my), 4, 0, 2 * Math.PI); ctx.fill();
     }
+  }
+
+  // Ticks (in log10 units) at 1, 2, 5 × 10^k; thinned to decades when the range is wide.
+  function logTicks(lMin, lMax) {
+    const out = [], mult = lMax - lMin > 3 ? [1] : [1, 2, 5];
+    for (let k = Math.floor(lMin); k <= Math.ceil(lMax); k++) {
+      for (const m of mult) { const v = k + Math.log10(m); if (v >= lMin && v <= lMax) out.push(v); }
+    }
+    return out;
   }
 
   function formatTick(v) {

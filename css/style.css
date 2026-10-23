@@ -213,6 +213,7 @@ input[type=range] { accent-color: var(--accent); }
 .checks li.warn b { color: var(--warn); }
 
 .chart { width: 100%; height: 150px; display: block; }
+.chart.small { height: 120px; margin-top: 6px; }
 
 .export { display: flex; gap: 6px; flex-wrap: wrap; }
 .export select { width: auto; flex: 1; }

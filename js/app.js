@@ -13,6 +13,7 @@
     Ein: 210, nuIn: 0.3, Eout: 210, nuOut: 0.3,
     odClr: 0.15, jbLen: 0, jbClr: 0.04, faceMu: 0.08,
     oil: 'custom', oilT: 40,
+    uT1: 40, uNu1: 32, uT2: 100, uNu2: 5.4, uT3: 0, uNu3: 0, uRho15: 870,
   };
   const STORE_KEY = 'gerotor.params.v1';
   const DEG = 180 / Math.PI;
@@ -64,18 +65,43 @@
     return Object.assign({}, DEFAULTS);
   }
 
+  // ν(T) curve of the selected oil (log axis), datasheet points and the operating temperature.
+  function drawOilCurve(oil, tC) {
+    const box = $('oilCurve');
+    box.hidden = !(oil && oil.fit);
+    if (box.hidden) return;
+    const pts = oil.points || [];
+    const tLo = Math.min(-20, tC - 10, ...pts.map(q => q[0] - 10));
+    const tHi = Math.max(120, tC + 10, ...pts.map(q => q[0] + 10));
+    const xs = [];
+    for (let t = tLo; t <= tHi + 1e-9; t += (tHi - tLo) / 120) xs.push(t);
+    const ys = xs.map(t => Math.max(G.viscosityFromFit(oil.fit, t), 0.5));
+    const step = tHi - tLo > 150 ? 40 : 20, ticks = [];
+    for (let t = Math.ceil(tLo / step) * step; t <= tHi; t += step) ticks.push(t);
+    G.lineChart($('oilChart'), { xs, ys, xMin: tLo, xMax: tHi, xTicks: ticks, xLabel: '°C', yLog: true,
+      marker: [tC, oil.nu], points: pts.filter(q => q[1] > 0) });
+    const notes = (oil.notes || []).length ? ' · ⚠ ' + oil.notes.join('; ') : '';
+    $('oilNote').textContent = `ν(${tC} °C) = ${oil.nu.toFixed(2)} cSt, ρ = ${oil.rho.toFixed(0)} kg/m³ · ` +
+      `Walther A = ${oil.fit.A.toFixed(4)}, B = ${oil.fit.B.toFixed(4)}` + notes;
+  }
+
   // ------------------------------------------------------------- compute
 
   function recompute() {
     // Oil preset: viscosity and density from temperature (js/fluid.js).
-    const oilKey = form.elements.oil.value;
-    const oil = oilKey !== 'custom' && G.oilProperties ? G.oilProperties(oilKey, parseFloat(form.elements.oilT.value)) : null;
-    form.elements.nu.disabled = form.elements.rho.disabled = !!oil;
+    // User oil: ASTM D341 line through the datasheet points.
+    const oilKey = form.elements.oil.value, oilT = parseFloat(form.elements.oilT.value);
+    const oil = oilKey === 'user' ? G.userOil(readForm(), oilT)
+      : oilKey !== 'custom' ? G.oilProperties(oilKey, oilT) : null;
+    const oilOk = !!(oil && Number.isFinite(oil.nu) && oil.nu > 0);
+    form.elements.nu.disabled = form.elements.rho.disabled = oilOk;
     form.elements.oilT.disabled = !oil;
-    if (oil && Number.isFinite(oil.nu)) {
+    $('userOil').hidden = oilKey !== 'user';
+    if (oilOk) {
       form.elements.nu.value = oil.nu.toFixed(2);
       form.elements.rho.value = oil.rho.toFixed(0);
     }
+    drawOilCurve(oil, oilT);
     const raw = readForm();
     if (Object.values(raw).some(v => typeof v === 'number' && !Number.isFinite(v))) return;
     store(raw);

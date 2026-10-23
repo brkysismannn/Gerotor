@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **198 pass · 0 fail · 3 known** (201 tests, ~110 s).
+Last run: 2026-10-23 — **210 pass · 0 fail · 3 known** (213 tests, ~115 s).
 
 ## Change log of the numerical core
 
@@ -204,6 +204,25 @@ c ≈ 0.02–0.04 mm reproduces the measured 3.33 L/min. Too many unknowns for a
 could be very different if a different rotor set is actually used").
 GDS "Approx. capacity" vs exact displacement: +0.7 % (Rexroth, miniature), +1.1 % (GDS screenshot), +4.6 %
 (Parker, N 5) — a closed-form approximation, consistently above the exact value.
+
+## 19. User oil from datasheet values (`js/fluid.js`, ASTM D341)
+
+The user enters the datasheet viscosities at two temperatures (a third, e.g. a cold value, is optional) and
+ρ at 15 °C. The Walther line log log(ν + 0.7) = A − B·log T passes exactly through two points; with three it is
+a least-squares fit. The simulation uses ν and ρ at the oil temperature from this curve (chart in the Fluid panel).
+
+| Test | Result |
+|---|---|
+| Two points at arbitrary temperatures (0 / 60 °C) reproduced | 1·10⁻¹³ % |
+| User oil at 40/100 °C = preset path | exact |
+| Three collinear points: least-squares B = two-point B, rms 0 | exact |
+| **Independent: Mobil DTE 10 Excel 32** (32.7 cSt @ 40 °C, 6.63 @ 100 °C; datasheet in the GDS study): ν(−20 °C) vs Brookfield 1090 cP | 1067 vs 1259 cSt (−15 %; 60 K extrapolation, VI 164 oil) |
+| Adding the −20 °C value as third point: ν(−30 °C) vs Brookfield 3360 cP | error −27 % → −12 % |
+| Flags: extrapolation outside the datasheet range, ν < 2 cSt (0.7-form limit), inconsistent third point, equal temperatures | ✓ |
+| Density ρ15·(1 − 6.5·10⁻⁴·(T − 15)) | exact |
+
+Brookfield values are low-shear dynamic viscosities converted with ρ(T); for polymer-containing high-VI oils
+they exceed the Newtonian extrapolation, so the cold-end comparison is a plausibility check.
 
 ## 6. Export
 

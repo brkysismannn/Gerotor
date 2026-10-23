@@ -28,7 +28,9 @@ No installation: open `index.html` in a browser.
   journal bearings (Totaro et al. 2025); shaft torque, mechanical / overall efficiency, input power.
 - **Performance map:** speed × pressure sweep of flow, η_v, η_m, η_t, torque and power; chart and CSV export.
 - **Reverse engineering:** profile parameters and profile clearance from measured diameters of an existing set.
-- **Oil presets:** viscosity (ASTM D341 / Walther) and density vs temperature for common oils.
+- **Oil presets and your own oil:** viscosity (ASTM D341 / Walther) and density vs temperature for common oils,
+  or a line fitted through your datasheet values (2 points, optional 3rd); the simulation reads ν, ρ at the oil
+  temperature from it (log-scale ν–T chart with the datasheet points).
 - **Flow ripple spectrum:** tooth-pass frequency and the strongest ripple harmonics (kinematic and port model).
 - **Relief / metering grooves:** optional grooves from each port edge into the lands (length, width); included
   in opening areas, pressure model, cross-porting check, drawing and DXF/SVG export.

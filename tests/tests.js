@@ -763,6 +763,40 @@
     record(S, 'Side load ∝ Δp (quasi-static)', 2, q2.shaftLoadMean / qsc.shaftLoadMean, 1e-9);
   }
 
+  // ------------------------------------------------------------ 19. user oil from datasheet (ASTM D341)
+
+  function suiteUserOil() {
+    const S = '19 · User oil (ASTM D341 datasheet fit)';
+    const oil = d => Object.assign({ uT1: 40, uNu1: 32, uT2: 100, uNu2: 5.4, uT3: 0, uNu3: 0, uRho15: 870 }, d);
+    // Two points at any temperatures are reproduced exactly.
+    const u = oil({ uT1: 0, uNu1: 300, uT2: 60, uNu2: 15 });
+    record(S, 'Two points (0 °C / 60 °C): ν(0 °C) reproduced', 300, G.userOil(u, 0).nu, 1e-9);
+    record(S, 'Two points (0 °C / 60 °C): ν(60 °C) reproduced', 15, G.userOil(u, 60).nu, 1e-9);
+    // Same as the preset path with 40/100 °C points.
+    record(S, 'User oil 40/100 °C = ISO VG 32 preset at 75 °C', G.oilProperties('vg32', 75).nu, G.userOil(oil({}), 75).nu, 1e-9);
+    // Three points on one Walther line → least squares returns that line.
+    const ref = G.waltherFit(46, 6.8), nu0 = G.viscosityFromFit(ref, -10);
+    const f3 = G.userOil(oil({ uNu1: 46, uNu2: 6.8, uT3: -10, uNu3: nu0 }), 20);
+    record(S, 'Three collinear points: least-squares B = two-point B', ref.B, f3.fit.B, 1e-9);
+    record(S, 'Three collinear points: rms deviation', 0, 100 * f3.fit.rms, 1e-6, { abs: true, unit: '%' });
+    // Independent check: Mobil DTE 10 Excel 32 datasheet (reproduced in the GDS correlation study):
+    // 32.7 cSt @ 40 °C, 6.63 cSt @ 100 °C, Brookfield 1090 cP @ −20 °C, ρ15 846.8 kg/m³.
+    const dte = oil({ uNu1: 32.7, uNu2: 6.63, uRho15: 846.8 });
+    const at20 = G.userOil(dte, -20);
+    record(S, 'DTE 10 Excel 32: extrapolated ν(−20 °C) vs Brookfield 1090 cP / ρ', 1090 / (at20.rho / 1000), at20.nu, 20,
+      { note: 'extrapolation 60 K below the datasheet range; high-VI oil' });
+    // A low-temperature third point improves the cold extrapolation (Brookfield 3360 cP @ −30 °C).
+    const two = G.userOil(dte, -30), three = G.userOil(Object.assign({}, dte, { uT3: -20, uNu3: 1090 / (at20.rho / 1000) }), -30);
+    const ref30 = 3360 / (two.rho / 1000);
+    check(S, `Third point at −20 °C: ν(−30 °C) error ${(100 * (two.nu / ref30 - 1)).toFixed(0)} % → ${(100 * (three.nu / ref30 - 1)).toFixed(0)} %`,
+      Math.abs(three.nu / ref30 - 1) < Math.abs(two.nu / ref30 - 1));
+    check(S, 'Extrapolation outside the datasheet temperatures is flagged', at20.notes.some(n => /extrapolated/.test(n)) && !G.userOil(dte, 60).notes.length);
+    check(S, 'ν < 2 cSt (outside the 0.7-form range) is flagged', G.userOil(oil({}), 250).notes.some(n => /2 cSt/.test(n)));
+    check(S, 'Inconsistent third point (non-Walther) is flagged', G.userOil(oil({ uT3: 0, uNu3: 100 }), 40).notes.some(n => /deviate/.test(n)));
+    check(S, 'Both points at one temperature → error', !!G.userOil(oil({ uT2: 40 }), 40).error);
+    record(S, 'Density ρ(T) = ρ15·(1 − 6.5·10⁻⁴·(T − 15))', 870 * (1 - 6.5e-4 * 65), G.userOil(oil({}), 80).rho, 1e-9);
+  }
+
   // ------------------------------------------------------------ 6. export
 
   function suiteExport() {
@@ -781,7 +815,7 @@
   function runAll() {
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds]) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil]) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };
