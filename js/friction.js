@@ -16,6 +16,13 @@
  *
  * Valid for full-film lubrication; the paper reports underestimation at low speed / high
  * pressure (mixed lubrication) and overestimation at high speed.
+ *
+ * Axial support (Gerotor Design Studio power model, 2016):
+ *   balanced (shadow or double-sided ports): rotors float, gap axialClr/2 on each face (above);
+ *   single-sided ports: the rotors are pressed onto the housing floor, the whole axial clearance
+ *     is on the port face (one viscous face, gap axialClr) and the floor carries Coulomb friction
+ *       M_c = μ_f · (Δp · A/2) · R_eff,   R_eff = 2/3 · (ro³ − ri³)/(ro² − ri²)
+ *     on each rotor face annulus (GDS: normal load = pressure × half the rotor face area).
  */
 (function (G) {
   'use strict';
@@ -38,13 +45,21 @@
 
   const journalTorque = (mu, w, R, L, c, eps) => TAU * mu * w * R ** 3 * L / (c * Math.sqrt(1 - eps * eps));
   const ringTorque = (mu, w, rIn, rOut, h) => (h > 0 && rOut > rIn) ? mu * Math.PI * w * (rOut ** 4 - rIn ** 4) / h : 0;
+  // Coulomb friction torque of an annulus pressed with uniform contact pressure q.
+  const coulombRingTorque = (muF, q, rIn, rOut) => (rOut > rIn && q > 0) ? muF * q * TAU / 3 * (rOut ** 3 - rIn ** 3) : 0;
+
+  // Rotors pressed to the floor: single-sided ports without shadow ports or double fill.
+  const singleSided = p => p.faceSupport === 'single' && !p.doubleFill;
 
   function computeMechanical(p, res) {
     const mm = 1e-3, tau = (p.N - 1) / p.N;
     const mu = p.nu * 1e-6 * p.rho;
     const w1 = p.rpm * TAU / 60, w2 = w1 * tau;
     const dp = p.dp * 1e5, L = p.b * mm;
-    const hLat = Math.max(0, p.axialClr) / 2 * mm;                 // per face
+    const single = singleSided(p);
+    // Viscous lateral faces: two faces with axialClr/2 each, or one face with the whole clearance
+    // (ringTorque is written for two faces; one face with gap h equals two faces with gap 2h).
+    const hLat = Math.max(0, p.axialClr) / 2 * mm * (single ? 4 : 1);
     const cOut = Math.max(0, p.odClr) / 2 * mm;                    // radial clearance outer rotor ↔ housing
 
     const Mth = res.cc * 1e-6 * dp / TAU;
@@ -57,6 +72,10 @@
     }
     const MoutLat = ringTorque(mu, w2, p.Rv * mm, p.OD / 2 * mm, hLat);
     const MinLat = ringTorque(mu, w1, p.bore / 2 * mm, p.innerRoot * mm, hLat);
+    // Floor friction (single-sided): contact pressure Δp/2 over the rotor face annuli.
+    const muF = Math.max(0, p.faceMu || 0);
+    const MoutFloor = single ? coulombRingTorque(muF, dp / 2, p.Rv * mm, p.OD / 2 * mm) : 0;
+    const MinFloor = single ? coulombRingTorque(muF, dp / 2, p.bore / 2 * mm, p.innerRoot * mm) : 0;
 
     let Mjb = 0, epsJb = 0;
     const cJb = Math.max(0, p.jbClr) / 2 * mm, Ljb = Math.max(0, p.jbLen) * mm, Rjb = p.bore / 2 * mm;
@@ -71,11 +90,11 @@
     const Mpress = res.contact && res.contact.pressureSource === 'simulated' ? res.contact.torqueMean : Mth;
     const Mports = Mpress - Mth;
 
-    const Mshaft = Mpress + tau * (MoutRad + MoutLat) + MinLat + Mjb;
+    const Mshaft = Mpress + tau * (MoutRad + MoutLat + MoutFloor) + MinLat + MinFloor + Mjb;
     const etaV = res.ports && res.ports.portEfficiency !== undefined ? res.ports.portEfficiency : 1;
     const etaM = Mshaft > 0 ? Mth / Mshaft : 1;
     return {
-      Mth, Mports, MoutRad, MoutLat, MinLat, Mjb, Mshaft, epsOut, epsJb, W,
+      Mth, Mports, MoutRad, MoutLat, MinLat, MoutFloor, MinFloor, Mjb, Mshaft, epsOut, epsJb, W, single,
       etaM, etaV, etaT: etaM * etaV,
       powerIn: Mshaft * w1,                     // W
       powerOut: etaV * res.cc * 1e-6 * p.rpm / 60 * dp,
@@ -83,5 +102,5 @@
     };
   }
 
-  Object.assign(G, { computeMechanical, ocvirkLoad, solveEccentricity, journalTorque, ringTorque });
+  Object.assign(G, { computeMechanical, ocvirkLoad, solveEccentricity, journalTorque, ringTorque, coulombRingTorque, singleSided });
 })(window.Gerotor);

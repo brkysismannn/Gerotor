@@ -32,8 +32,13 @@ No installation: open `index.html` in a browser.
 - **Flow ripple spectrum:** tooth-pass frequency and the strongest ripple harmonics (kinematic and port model).
 - **Relief / metering grooves:** optional grooves from each port edge into the lands (length, width); included
   in opening areas, pressure model, cross-porting check, drawing and DXF/SVG export.
-- **Filling-limited max speed:** highest speed with chamber void ≤ 0.5 % (bisection on the network model) and
-  the speed where the inlet port velocity reaches 2 m/s.
+- **Filling-limited max speed:** highest speed with chamber void ≤ 0.5 % (bisection on the network model), the
+  speed where the inlet port velocity reaches 2 m/s, and the GDS criteria (tip dynamic pressure, inlet gallery Re).
+- **Axial support:** balanced (shadow / double-sided ports) or single-sided (rotors pressed to the housing floor:
+  Coulomb floor friction, whole axial clearance on the port face) — as in the GDS power model.
+- **Shaft side load:** radial load on the shaft from chamber pressures and the tooth contact (magnitude, angle).
+- **Benchmarks against real pumps:** Bosch Rexroth PGZ4-80 (flow −3 %, drive power +0.6 %) and the Mancò 2002
+  miniature gerotor (drive torque −6 %); see `docs/validation.md` §18.
 - **Port checks:** cross-porting, trapped volume, inlet velocity ≤ 2 m/s, inner tip speed ≤ 15 m/s,
   pressure overshoot, cavitation.
 - **Design Assist:** from flow, speed, volumetric efficiency and packaging limits (max outer Ø, rotor width,

@@ -11,7 +11,7 @@
     pIn: 1, pVap: 0.2, rho: 860, bulk: 1400, Cd: 0.7, nu: 30,
     leakOn: true, axialClr: 0.05, shaftVent: true, tipGapModel: 'backlash',
     Ein: 210, nuIn: 0.3, Eout: 210, nuOut: 0.3,
-    odClr: 0.15, jbLen: 0, jbClr: 0.04,
+    odClr: 0.15, jbLen: 0, jbClr: 0.04, faceSupport: 'balanced', faceMu: 0.08,
     oil: 'custom', oilT: 40,
   };
   const STORE_KEY = 'gerotor.params.v1';
@@ -122,6 +122,7 @@
     if (ct) {
       m.push(
         ['Shaft torque mean / ripple', f(ct.torqueMean, 2) + ' N·m / ' + f(ct.torqueRipple * 100, 1) + ' %'],
+        ['Shaft side load mean / max', f(ct.shaftLoadMean, 0) + ' / ' + f(ct.shaftLoadMax, 0) + ' N at ' + f(ct.shaftLoadAngle, 1) + '°'],
         ['Contact force max', f(ct.Fmax, 0) + ' N'],
         ['Hertz pressure max', f(ct.pmaxMax / 1e6, 0) + ' MPa'],
         ['Sliding speed max', f(ct.vsMax, 3) + ' m/s'],
@@ -142,6 +143,7 @@
         ['Mechanical / overall efficiency', f(me.etaM * 100, 1) + ' / ' + f(me.etaT * 100, 1) + ' %', true],
         ['Input power', f(me.powerIn / 1000, 3) + ' kW'],
         ['Losses: OD / outer faces / inner faces / ports', [me.MoutRad * (p.N - 1) / p.N, me.MoutLat * (p.N - 1) / p.N, me.MinLat, me.Mports].map(x => f(x, 3)).join(' / ') + ' N·m'],
+        ...(me.single ? [['Floor friction (single-sided, μ ' + f(p.faceMu, 2) + ')', f(me.MoutFloor * (p.N - 1) / p.N + me.MinFloor, 3) + ' N·m']] : []),
       );
     }
     $('metrics').innerHTML = m.map(([k, v, big]) => `<dt>${k}</dt><dd${big ? ' class="big"' : ''}>${v}</dd>`).join('');

@@ -29,7 +29,7 @@
     gSucStart: 0, gSucEnd: 0, gDelStart: 0, gDelEnd: 0, grooveW: 1,
     doubleFill: false, pIn: 1, pVap: 0.2, rho: 860, bulk: 1400, Cd: 0.7,
     nu: 30, leakOn: false, axialClr: 0.05, shaftVent: true,
-    odClr: 0.15, jbLen: 0, jbClr: 0.04,
+    odClr: 0.15, jbLen: 0, jbClr: 0.04, faceSupport: 'balanced', faceMu: 0.08,
   };
 
   function design(d) {
@@ -701,6 +701,61 @@
     record(S, 'Inlet-velocity speed limit: v = 2 m/s at n_inlet', 2, base.r.flowLpm / P.rpm * base.m.rpmInlet * 1000 / (60 * base.r.ports.suction.area), 1e-6);
   }
 
+  // ------------------------------------------------------------ 18. GDS documents: pumps, axial support, cavitation, side load
+
+  function suiteGds() {
+    const S = '18 · GDS correlation pumps & models';
+    // GDS geometry inputs: root = inner root radius → R = root + rp + e; outer root radius = R + 2e − rp.
+    const gds = (N, e, root, rp, d) => design(Object.assign({ N, e, R: root + rp + e, rp, RvClear: 0, portsOn: true, leakOn: true }, d));
+
+    // Bosch Rexroth PGZ4-80 (GDS correlation study 2016; catalogue RE 10233): shadow ports → balanced.
+    // Catalogue: V 84.2 cm³, q 116 L/min at 1450 rpm / 10 bar / 30 cSt, drive power 1.1 kW (Δp≈1 bar), 3.0 kW (Δp≈10 bar).
+    const rex = d => G.analyse(gds(9, 4.4, 35, 20, Object.assign({ c: 0.1, fillet: 2, b: 39, OD: 110, bore: 42, axialClr: 0.07, odClr: 0.07, nu: 30, rho: 847, rpm: 1450, dp: 10 }, d)));
+    const r10 = rex({}), r1 = rex({ dp: 1 });
+    record(S, 'Rexroth PGZ4-80: displacement vs catalogue', 84.2, r10.cc, 1);
+    record(S, 'Rexroth PGZ4-80: flow at 1450 rpm, 10 bar vs catalogue', 116, r10.ports.flowLpm, 5,
+      { note: 'GDS 116.94; tip/axial clearances assumed by GDS (0.1 / 0.07 mm)' });
+    record(S, 'Rexroth PGZ4-80: drive power at Δp ≈ 10 bar vs catalogue', 3000, r10.mech.powerIn, 5, { note: 'GDS 2994 W' });
+    record(S, 'Rexroth PGZ4-80: drive power at Δp ≈ 1 bar vs catalogue', 1100, r1.mech.powerIn, 10, { note: 'GDS 1134 W; catalogue value is rounded' });
+
+    // Mancò et al. 2002 miniature gerotor (GDS model inputs; single-sided ports, μ 0.04 as fitted by GDS).
+    const mini = d => gds(13, 0.5, 7.25, 1.5, Object.assign({ c: 0.002, fillet: 0.5, b: 3.8, OD: 23, bore: 5, axialClr: 0.01, odClr: 0.01, nu: 46, rho: 870, rpm: 1500, dp: 50, faceSupport: 'single', faceMu: 0.04 }, d));
+    const mg = G.analyse(mini({ c: 0, portsOn: false, rpm: 0, dp: 0 }));
+    record(S, 'Miniature gerotor: min chamber volume vs GDS', 0.43, mg.Amin * 3.8, 2);
+    record(S, 'Miniature gerotor: max chamber volume vs GDS', 16.04, mg.Amax * 3.8, 3, { note: 'GDS shows inputs rounded to 0.001–0.01 mm' });
+    record(S, 'Miniature gerotor: drive torque at 1500 rpm, 50 bar vs measured (Mancò 2002)', 0.48, G.analyse(mini({})).mech.Mshaft, 10,
+      { note: 'GDS 0.55 N·m; measured offset 0.14 N·m at 0 bar from seals is not modelled' });
+
+    // Axial support: single-sided = one open face with the whole clearance.
+    const base = { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5, portsOn: true, leakOn: true, axialClr: 0.06 };
+    const bal = G.analyse(design(base)), sgl = G.analyse(design(Object.assign({}, base, { faceSupport: 'single', faceMu: 0.1 })));
+    record(S, 'Single-sided: viscous face drag = ¼ of balanced (GDS: balanced ×4)', 0.25, sgl.mech.MinLat / bal.mech.MinLat, 1e-9);
+    record(S, 'Single-sided: face leakage conductance = 4× balanced', 4, sgl.ports.sim.conductances.Gper / bal.ports.sim.conductances.Gper, 1e-9);
+    const p = design(base), ro = p.OD / 2e3, ri = p.Rv / 1e3, q = 50e5;
+    record(S, 'Floor friction = μ·(Δp/2·A)·R_eff, R_eff = ⅔(ro³−ri³)/(ro²−ri²)',
+      0.1 * q * Math.PI * (ro * ro - ri * ri) * 2 / 3 * (ro ** 3 - ri ** 3) / (ro * ro - ri * ri), sgl.mech.MoutFloor, 1e-9);
+    check(S, 'Single-sided: lower η_v and η_m than balanced', sgl.ports.portEfficiency < bal.ports.portEfficiency && sgl.mech.etaM < bal.mech.etaM);
+    const dbl = G.analyse(design(Object.assign({}, base, { faceSupport: 'single', doubleFill: true })));
+    check(S, 'Double-sided ports override single-sided support (rotors balanced)', !dbl.mech.single && dbl.mech.MoutFloor === 0);
+
+    // GDS cavitation limits.
+    const lim = G.gdsCavitationLimits(p, bal);
+    const w = lim.rpmTip * TAU / 60, rT = p.innerTip * 1e-3;
+    record(S, 'GDS tip criterion: ½ρ(r_tip·ω)² = p_in − p_vap', (p.pIn - p.pVap) * 1e5, 0.5 * p.rho * (rT * w) ** 2, 1e-9);
+    const A = bal.ports.suction.area * 1e-6, U = bal.cc * 1e-6 * lim.rpmGallery / 60 / A;
+    record(S, 'GDS gallery criterion: Re = U·D/ν = 2000', 2000, U * Math.sqrt(4 * A / Math.PI) / (p.nu * 1e-6), 1e-9);
+
+    // Shaft side load.
+    const qsc = G.computeContact(p, bal, { quasiStatic: true });
+    record(S, 'Side load with equal pressure in all chambers', 0, G.computeContact(p, bal, { gauge: () => 1e7 }).shaftLoadMax, 1e-6, { abs: true, unit: 'N' });
+    record(S, 'Side load direction: perpendicular to the line of centres, delivery → suction side', 90, qsc.shaftLoadAngle, 2, { abs: true, unit: '°' });
+    const W = p.dp * 1e5 * 2 * p.innerTip * 1e-3 * p.b * 1e-3;
+    record(S, 'Side load vs projected-area estimate Δp·2R_tip·b (Totaro 2025)', W, qsc.shaftLoadMean, 20,
+      { note: 'estimate projects the full tip diameter; the loaded chord is shorter' });
+    const q2 = G.computeContact(design(Object.assign({}, base, { dp: 200 })), bal, { quasiStatic: true });
+    record(S, 'Side load ∝ Δp (quasi-static)', 2, q2.shaftLoadMean / qsc.shaftLoadMean, 1e-9);
+  }
+
   // ------------------------------------------------------------ 6. export
 
   function suiteExport() {
@@ -719,7 +774,7 @@
   function runAll() {
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed]) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds]) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };

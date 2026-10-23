@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **176 pass · 0 fail · 3 known** (179 tests, ~95 s).
+Last run: 2026-10-23 — **194 pass · 0 fail · 3 known** (197 tests, ~110 s).
 
 ## Change log of the numerical core
 
@@ -168,8 +168,41 @@ n_max ∝ C_d · A_open · √((p_in − p_vap)/ρ). The model reproduces this l
 | Double fill (ports on both faces) | × 2 | 0.32 % |
 | Inlet-velocity limit: v = 2 m/s at reported n_inlet | 2 m/s | 0 |
 
+GDS cavitation criteria (tip dynamic pressure, inlet-gallery Re = 2000; see §18) are reported next to it.
+
 Fix found while adding this: the network model ignored *double fill* for the orifice areas (it only doubled
 the port-land leakage); suction and delivery opening areas are now doubled.
+
+## 18. GDS documents: correlation pumps, axial support, cavitation limits, side load
+
+Source: Gerotor Design Studio documents in `References/GDS Documents/` (correlation study V2.0.30, power,
+cavitation and contact-stress notes, user guide V2021). GDS inputs → this tool: R = inner root radius + r_p + e,
+outer root radius = R + 2e − r_p (valley margin 0), tip clearance → c, axial clearance → axialClr,
+circumferential clearance = axial clearance (GDS assumption) → odClr.
+
+| Test | Reference | This tool | Error |
+|---|---|---|---|
+| **Rexroth PGZ4-80** (N 9, e 4.4, root 35, r_p 20, b 39, OD 110; shadow ports): displacement | 84.2 cm³ (catalogue) | 83.83 | −0.44 % |
+| Rexroth: flow 1450 rpm, 10 bar, 30 cSt | 116 L/min (GDS 116.94) | 112.36 | −3.1 % |
+| Rexroth: drive power at Δp ≈ 10 bar | 3.0 kW (GDS 2994 W) | 3019 W | +0.6 % |
+| Rexroth: drive power at Δp ≈ 1 bar | 1.1 kW (GDS 1134 W) | 1172 W | +6.6 % |
+| **Mancò 2002 miniature gerotor** (N 13, e 0.5, root 7.25, r_p 1.5, b 3.8): min chamber volume | 0.43 mm³ (GDS) | 0.427 | −0.7 % |
+| Miniature: max chamber volume | 16.04 mm³ (GDS) | 15.72 | −2.0 % |
+| Miniature: drive torque 1500 rpm, 50 bar, single-sided ports, μ 0.04 | 0.48 N·m measured (GDS 0.55) | 0.453 | −5.7 % |
+| Single-sided support: viscous face drag ¼ of balanced (GDS: balanced ×4); face leakage ×4 | — | exact | 0 |
+| Floor friction μ·(Δp·A/2)·R_eff; double-sided ports override single-sided support | — | exact | 0 |
+| GDS cavitation criteria: ½ρ(r_tip·ω)² = p_in − p_vap; inlet gallery Re = 2000 | — | exact | 0 |
+| Shaft side load: zero with equal chamber pressures | 0 N | 1·10⁻¹¹ N | — |
+| Side load direction (quasi-static, delivery in the lower half) | 90° | 90.04° | 0.04° |
+| Side load vs projected-area estimate Δp·2R_tip·b (Totaro 2025) | 9988 N | 8582 N | −14 % (estimate projects the full tip Ø) |
+
+Not used as a test — **Parker PGG20010**: the rotor set is GDS's guess (Nichols 4086, b 7 mm), its GDS capacity
+(0.236 in³) exceeds the catalogue 0.218 in³, and with the assumed 0.08 mm tip clearance this tool's tip leakage
+(backlash gaps up to ~2c on the delivery side) gives η_v ≈ 15 % at 1000 rpm / 34.5 bar vs 86 % measured;
+c ≈ 0.02–0.04 mm reproduces the measured 3.33 L/min. Too many unknowns for a benchmark (GDS itself: "values
+could be very different if a different rotor set is actually used").
+GDS "Approx. capacity" vs exact displacement: +0.7 % (Rexroth, miniature), +1.1 % (GDS screenshot), +4.6 %
+(Parker, N 5) — a closed-form approximation, consistently above the exact value.
 
 ## 6. Export
 

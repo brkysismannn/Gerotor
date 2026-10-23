@@ -224,6 +224,13 @@
               <input name="jbLen" type="number" min="0" step="1" value="0"></label>
             <label>Bearing clearance (diam.) <span class="unit">mm</span>
               <input name="jbClr" type="number" min="0" step="0.005" value="0.04"></label>
+            <label>Axial support
+              <select name="faceSupport">
+                <option value="balanced">Balanced (shadow / double ports)</option>
+                <option value="single">Single-sided (pressed to floor)</option>
+              </select></label>
+            <label>Floor friction coeff. μ
+              <input name="faceMu" type="number" min="0" step="0.01" value="0.08"></label>
           </div>
         </fieldset>
         <div class="btn-row">

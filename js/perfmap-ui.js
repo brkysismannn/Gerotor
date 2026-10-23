@@ -63,7 +63,8 @@
     $('maxStatus').textContent = 'Computing…';
     setTimeout(() => {
       const m = G.maxSpeed(params, res);
-      const inlet = `inlet port velocity reaches 2 m/s at ${m.rpmInlet.toFixed(0)} rpm`;
+      const inlet = `inlet port velocity reaches 2 m/s at ${m.rpmInlet.toFixed(0)} rpm; ` +
+        `GDS criteria: ${m.gds.rpm.toFixed(0)} rpm (${m.gds.basis}; tip ${m.gds.rpmTip.toFixed(0)}, gallery ${m.gds.rpmGallery.toFixed(0)} rpm)`;
       $('maxStatus').textContent = Number.isNaN(m.rpm)
         ? `Chamber void exceeds 0.5 % already at ${m.below} rpm; raise the inlet pressure or retime the suction port. ${inlet}.`
         : `Filling-limited max speed ≈ ${m.rpm.toFixed(0)} rpm${m.above ? '+' : ''} (peak void 0.5 %, Δp ${params.dp} bar, inlet ${params.pIn} bar abs); ${inlet}.`;

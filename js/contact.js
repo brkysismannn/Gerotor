@@ -15,6 +15,13 @@
  *   p_max = sqrt(F·E* / (π·b·ρ_eq)),  half-width a = sqrt(4·F·ρ_eq / (π·b·E*))
  * Sliding velocity: v_s = |ω1 − ω2|·|P − I| = (ω1/N)·|P − I|, I = pitch point (N·e, 0).
  * Wear-rate proportional factor (Ivanović 2020, after Colbourne): WRPF = p_max · v_s.
+ *
+ * Shaft side load (GDS "Shaft Side Load"): uniform pressure on the inner-rotor flank between the
+ * two contacts of a chamber has the resultant g·b·J(c1 − c0) (closing chord rotated by 90°, pointing
+ * into the rotor). With the contact reaction −F_n·n on the inner rotor, the load on the shaft is
+ *   F_shaft = Σ_k g_k·b·J(c1 − c0) − F_n·n.
+ * The fluid forces on the two rotors of a closed chamber cancel, so the outer rotor presses on the
+ * housing bore with the same magnitude in the opposite direction.
  */
 (function (G) {
   'use strict';
@@ -49,27 +56,33 @@
     const w1 = p.rpm * TAU / 60;
     const Es = eStar((p.Ein || 210) * 1e9, p.nuIn ?? 0.3, (p.Eout || 210) * 1e9, p.nuOut ?? 0.3);
     const sim = !opts.quasiStatic && res.ports && res.ports.sim ? res.ports.sim : null;
-    const gauge = (j, k) => {
+    const gauge = opts.gauge || ((j, k) => {
       const jk = (j + k * step) % M;
       if (sim) return sim.P[jk] - sim.pS;
       const th = (jk * dt + Math.PI / N) % TAU;          // housing angle of chamber k
       return th > Math.PI ? dpPa : 0;
-    };
+    });
 
     const F = new Float64Array(M), Pmax = new Float64Array(M), Vs = new Float64Array(M), W = new Float64Array(M);
     const Tshaft = new Float64Array(M), Tenergy = new Float64Array(M), armRatio = new Float64Array(M), pitchDist = new Float64Array(M);
     const lobe = new Uint8Array(M), buf = new Float64Array(N);
+    const Sx = new Float64Array(M), Sy = new Float64Array(M);       // shaft side load [N]
     const I = [N * p.e, 0];
 
     // All quantities are 2π/N-periodic (chamber k at t ≡ chamber 0 at t + 2πk/N), so one lobe
     // pitch is computed and replicated.
     for (let j = 0; j < step; j++) {
       const t = j * dt;
-      let To = 0, Ti = 0, Te = 0;
+      let To = 0, Ti = 0, Te = 0, fx = 0, fy = 0;
       for (let k = 0; k < N; k++) {
         const ch = G.chamber(p, t + TAU * k / N, L, -1);
         const [c0, c1] = ch.contacts, g = gauge(j, k);
         const m = v => v * 1e-3;
+        // Resultant on the inner rotor: chord rotated by 90°, oriented away from the chamber
+        // (towards O1 side of the chord).
+        let ux = -(c1[1] - c0[1]), uy = c1[0] - c0[0];
+        if (ux * (0.5 * (c0[0] + c1[0]) - p.e) + uy * 0.5 * (c0[1] + c1[1]) > 0) { ux = -ux; uy = -uy; }
+        fx += g * b * m(ux); fy += g * b * m(uy);
         To += g * b / 2 * (m(c1[0]) ** 2 + m(c1[1]) ** 2 - m(c0[0]) ** 2 - m(c0[1]) ** 2);
         Ti += g * b / 2 * ((m(c0[0] - p.e)) ** 2 + m(c0[1]) ** 2 - (m(c1[0] - p.e)) ** 2 - m(c1[1]) ** 2);
         Te += g * (-dA[(j + k * step) % M]) * 1e-6 * b * tau;        // power balance, per inner rad
@@ -90,6 +103,7 @@
       armRatio[j] = armI / armO;
       pitchDist[j] = Math.abs((I[0] - P[0]) * n[1] - (I[1] - P[1]) * n[0]);   // line of action ↔ pitch point [mm]
       F[j] = To / armO;            // To is the resisting fluid torque; > 0: inner rotor drives the outer
+      Sx[j] = fx - F[j] * n[0]; Sy[j] = fy - F[j] * n[1];
       const rhoEq = G.contactRhoEq(p, -tk / (N - 1)) * 1e-3;
       Pmax[j] = F[j] > 0 ? hertzPmax(F[j], b, rhoEq, Es) : 0;
       Vs[j] = (w1 / N) * Math.hypot(P[0] - I[0], P[1] - I[1]) * 1e-3;
@@ -99,6 +113,7 @@
       const j0 = j % step, sh = Math.floor(j / step);
       F[j] = F[j0]; Pmax[j] = Pmax[j0]; Vs[j] = Vs[j0]; W[j] = W[j0];
       Tshaft[j] = Tshaft[j0]; Tenergy[j] = Tenergy[j0]; armRatio[j] = armRatio[j0]; pitchDist[j] = pitchDist[j0];
+      Sx[j] = Sx[j0]; Sy[j] = Sy[j0];             // housing frame: the pattern repeats every pitch
       lobe[j] = ((lobe[j0] - sh) % N + N) % N;      // one pitch later the next-lower lobe sits there
     }
 
@@ -106,8 +121,12 @@
     const min = a => a.reduce((m, x) => Math.min(m, x), Infinity);
     const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
     const tm = mean(Tshaft);
+    const S = Array.from(Sx, (x, j) => Math.hypot(x, Sy[j]));
+    const sxm = mean(Sx), sym = mean(Sy);
     return {
       F, Pmax, Vs, W, Tshaft, Tenergy, armRatio, pitchDist, lobe, Es,
+      shaftX: Sx, shaftY: Sy, shaftLoadMax: max(S), shaftLoadMean: Math.hypot(sxm, sym),
+      shaftLoadAngle: Math.atan2(sym, sxm) * 180 / Math.PI,
       pressureSource: sim ? 'simulated' : 'quasi-static',
       Fmax: max(F), Fmin: min(F),
       pmaxMax: max(Pmax), vsMax: max(Vs), wrpfMax: max(W),

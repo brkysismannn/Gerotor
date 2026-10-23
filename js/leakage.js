@@ -65,7 +65,10 @@
 
     // Gap heights [m].
     const hTip = leak ? Math.max(0, p.c) * 1e-3 : 0;
-    const hAx = leak ? Math.max(0, p.axialClr) / 2 * 1e-3 : 0;          // per face
+    // Axial faces: balanced rotors have axialClr/2 on both faces; single-sided ports press the
+    // rotors onto the housing floor, leaving the whole clearance on the port face only.
+    const single = G.singleSided(p), nFaces = single ? 1 : 2;
+    const hAx = leak ? Math.max(0, p.axialClr) / nFaces * 1e-3 : 0;     // per open face
 
     // Leading-contact gap and equivalent radius of chamber 0 on the grid → tip conductance.
     // Gap: actual backlash gap h(t) (js/backlash.js) or a uniform gap c.
@@ -78,10 +81,10 @@
         Gtip0[j] = hj > 0 ? tipConductance(b, hj, mu, contactRhoEq(p, phi1) * 1e-3) : 0;
       }
     }
-    // Face conductances (two faces each).
+    // Face conductances (open faces).
     const theta = TAU / N;
-    const Gbore = hAx > 0 && p.bore > 0 ? 2 * sectorConductance(theta, hAx, mu, p.bore / 2 * 1e-3, p.innerRoot * 1e-3) : 0;
-    const Gper = hAx > 0 ? 2 * sectorConductance(theta, hAx, mu, p.Rv * 1e-3, p.OD / 2 * 1e-3) : 0;
+    const Gbore = hAx > 0 && p.bore > 0 ? nFaces * sectorConductance(theta, hAx, mu, p.bore / 2 * 1e-3, p.innerRoot * 1e-3) : 0;
+    const Gper = hAx > 0 ? nFaces * sectorConductance(theta, hAx, mu, p.Rv * 1e-3, p.OD / 2 * 1e-3) : 0;
     const boreVented = p.shaftVent !== false;
     // Port lands (one face, or both with double fill).
     let Gland = 0;
