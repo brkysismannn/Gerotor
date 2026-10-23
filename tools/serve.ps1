@@ -55,13 +55,16 @@ function Handle-Modelica($ctx) {
   if ($body.check -and $om -and (Test-Path $mo)) {
     $script = Join-Path $dir 'check.mos'
     $moFwd = $mo -replace '\\', '/'
-    "loadModel(Modelica, {`"4.1.0`"}); getErrorString();`nloadFile(`"$moFwd`"); getErrorString();`ncheckModel($name.Examples.PumpSystem); getErrorString();" |
+    "loadModel(Modelica, {`"4.1.0`"}); getErrorString();`nloadFile(`"$moFwd`"); getErrorString();`nloadFile(`"$($moFwd -replace '\.mo$','_System.mo')`"); getErrorString();`ncheckModel($($name)_System); getErrorString();" |
       Set-Content -Path $script -Encoding ascii
     $result.check = (& (Join-Path $om 'bin\omc.exe') $script 2>&1 | Out-String)
   }
   if ($body.open) {
     if ($om -and (Test-Path $mo)) {
-      Start-Process -FilePath (Join-Path $om 'bin\OMEdit.exe') -ArgumentList "`"$mo`"" | Out-Null
+      # Library first, then the top-level system model (OMEdit shows the last file's diagram).
+      $sys = Join-Path $dir "$($name)_System.mo"
+      $omArgs = if (Test-Path $sys) { "`"$mo`" `"$sys`"" } else { "`"$mo`"" }
+      Start-Process -FilePath (Join-Path $om 'bin\OMEdit.exe') -ArgumentList $omArgs | Out-Null
       $result.opened = $true
     } else { $result.opened = $false; $result.error = 'OpenModelica (OMEdit) not found' }
   }

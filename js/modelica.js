@@ -281,6 +281,17 @@ end ${name};
     return [head.join(','), ...rows.map(r => r.join(','))].join('\n') + '\n';
   }
 
+  // Top-level system model (own file) so that OMEdit opens straight into the connected diagram.
+  function systemText(p, name) {
+    const w2 = p.rpm * TAU / 60 * (p.N - 1) / p.N, stop = 6 * TAU / Math.max(w2, 1e-9);
+    return `within ;
+model ${name}_System "Ready-to-run system: ${p.rpm} rpm, ${p.dp} bar (open the Diagram view; Simulate)"
+  extends ${name}.Examples.PumpSystem;
+  annotation (experiment(StopTime=${num(stop)}, Interval=${num(stop / 4000)}, Tolerance=1e-6));
+end ${name}_System;
+`;
+  }
+
   function exportModelica(p, res, opt) {
     opt = opt || {};
     const name = ident(opt.name || 'GerotorPump');
@@ -289,11 +300,12 @@ end ${name};
       name,
       files: {
         [name + '.mo']: mo,
+        [name + '_System.mo']: systemText(p, name),
         'cases.mos': caseScript(p, res, Object.assign({}, opt, { name }), name + '.mo'),
         'cases.csv': caseCsv(p, res, opt),
       },
     };
   }
 
-  G.modelica = { exportModelica, packageText, caseScript, caseCsv, cases, tables, ident };
+  G.modelica = { exportModelica, packageText, systemText, caseScript, caseCsv, cases, tables, ident };
 })(window.Gerotor);
