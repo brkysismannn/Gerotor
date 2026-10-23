@@ -10,6 +10,13 @@
   <header class="topbar">
     <h1>Gerotor Design Tool</h1>
     <span class="subtitle">Classic gerotor · trochoidal profile</span>
+    <nav class="steps" id="steps" aria-label="Design steps">
+      <button type="button" data-go="1"><b>1</b>Geometry</button>
+      <button type="button" data-go="2"><b>2</b>Ports</button>
+      <button type="button" data-go="3"><b>3</b>Fluid</button>
+      <button type="button" data-go="4"><b>4</b>Performance</button>
+      <button type="button" data-go="5"><b>5</b>Outputs</button>
+    </nav>
     <button id="assistOpen" class="primary topbtn" type="button">Design Assist</button>
     <button id="themeToggle" class="ghost" type="button" title="Toggle theme">◐</button>
   </header>
@@ -83,7 +90,8 @@
   <main class="layout">
     <aside class="panel params">
       <form id="params" autocomplete="off">
-        <fieldset>
+        <p class="step-intro" id="stepIntro"></p>
+        <fieldset data-steps="1">
           <legend>Geometry</legend>
           <label>Outer rotor lobes <i>N</i>
             <input name="N" type="number" min="3" max="30" step="1" value="7"></label>
@@ -105,7 +113,7 @@
           <label>Outer rotor fillet radius <span class="unit">mm</span>
             <input name="fillet" type="number" min="0" step="0.1" value="0"></label>
         </fieldset>
-        <fieldset>
+        <fieldset data-steps="1">
           <legend>Body</legend>
           <label>Rotor width <i>b</i> <span class="unit">mm</span>
             <input name="b" type="number" min="0.1" step="1" value="20"></label>
@@ -114,14 +122,14 @@
           <label>Inner rotor bore <span class="unit">mm</span>
             <input name="bore" type="number" min="0" step="1" value="18"></label>
         </fieldset>
-        <fieldset>
+        <fieldset data-steps="2 4">
           <legend>Operating point</legend>
           <label>Shaft speed <span class="unit">rpm</span>
             <input name="rpm" type="number" min="0" step="50" value="1500"></label>
           <label>Pressure rise Δp <span class="unit">bar</span>
             <input name="dp" type="number" min="0" step="5" value="100"></label>
         </fieldset>
-        <fieldset>
+        <fieldset data-steps="4">
           <legend>Material</legend>
           <div class="grid2">
             <label>Inner E <span class="unit">GPa</span>
@@ -134,7 +142,7 @@
               <input name="nuOut" type="number" min="0" max="0.5" step="0.01" value="0.3"></label>
           </div>
         </fieldset>
-        <fieldset>
+        <fieldset data-steps="2">
           <legend>Ports</legend>
           <label class="inline"><input name="portsOn" type="checkbox" checked> Enable port model</label>
           <label class="with-check">Outer port radius <span class="unit">mm</span>
@@ -184,7 +192,7 @@
           <label class="inline"><input name="dblOut" type="checkbox"> Double-sided outlet port</label>
           <label class="inline"><input name="shadow" type="checkbox" checked> Shadow ports</label>
         </fieldset>
-        <fieldset>
+        <fieldset data-steps="3">
           <legend>Fluid</legend>
           <div class="grid2">
             <label>Oil
@@ -225,7 +233,7 @@
             <p class="note" id="oilNote"></p>
           </div>
         </fieldset>
-        <fieldset>
+        <fieldset data-steps="3">
           <legend>Leakage</legend>
           <label class="inline"><input name="leakOn" type="checkbox" checked> Model internal leakage</label>
           <p class="note">Tip/flank gaps follow from the inner profile clearance <i>c</i>. Axial clearance is the total over both faces.</p>
@@ -237,7 +245,7 @@
           </div>
           <label class="inline"><input name="shaftVent" type="checkbox" checked> Shaft bore vented to inlet</label>
         </fieldset>
-        <fieldset>
+        <fieldset data-steps="4">
           <legend>Friction</legend>
           <p class="note">Viscous losses (Totaro et al. 2025); full-film lubrication assumed.</p>
           <div class="grid2">
@@ -251,6 +259,14 @@
               <input name="faceMu" type="number" min="0" step="0.01" value="0.08"></label>
           </div>
         </fieldset>
+        <fieldset data-steps="5">
+          <legend>Design summary</legend>
+          <dl class="metrics small" id="summary"></dl>
+        </fieldset>
+        <div class="step-nav">
+          <button type="button" id="stepBack" class="ghost">← Back</button>
+          <button type="button" id="stepNext" class="primary">Next →</button>
+        </div>
         <div class="btn-row">
           <button type="button" id="resetBtn" class="ghost">Defaults</button>
           <button type="button" id="saveBtn" class="ghost">Save JSON</button>
@@ -287,29 +303,26 @@
     </section>
 
     <aside class="panel results">
-      <section>
-        <h2>Performance</h2>
+      <div class="kpis" id="kpis"></div>
+      <section data-steps="1 2 3 4">
+        <h2 id="metricsTitle">Results</h2>
         <dl class="metrics" id="metrics"></dl>
       </section>
-      <section>
-        <h2>Checks</h2>
-        <ul class="checks" id="checks"></ul>
-      </section>
-      <section>
+      <section data-steps="1">
         <h2>Chamber area <small>mm² · housing angle</small></h2>
         <canvas class="chart" id="areaChart"></canvas>
         <div class="chart-legend" id="areaLegend"></div>
       </section>
-      <section>
+      <section data-steps="2 3">
         <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
         <canvas class="chart" id="pressureChart"></canvas>
       </section>
-      <section>
+      <section data-steps="2 3 4">
         <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
         <canvas class="chart" id="flowChart"></canvas>
         <div class="chart-legend" id="flowLegend"></div>
       </section>
-      <section>
+      <section data-steps="4">
         <h2>Charts <small>pump performance range</small></h2>
         <form id="mapForm" class="params" autocomplete="off">
           <div class="grid2">
@@ -320,7 +333,7 @@
             <label>Speed points<input name="nRpm" type="number" min="1" max="8" step="1" value="6"></label>
             <label>Pressure points<input name="nDp" type="number" min="1" max="8" step="1" value="6"></label>
           </div>
-          <div class="checks" id="chartPick">
+          <div class="chart-pick" id="chartPick">
             <label><input type="checkbox" value="flow" checked> Flow</label>
             <label><input type="checkbox" value="etaV" checked> Volumetric efficiency</label>
             <label><input type="checkbox" value="power" checked> Drive power</label>
@@ -340,11 +353,15 @@
         <div class="note" id="mapStatus"></div>
         <div class="note" id="maxStatus"></div>
       </section>
-      <section>
+      <section data-steps="1 2">
         <h2>Dimensions</h2>
         <dl class="metrics small" id="dims"></dl>
       </section>
-      <section>
+      <section data-steps="1 2 3 4">
+        <h2>Checks <small id="checksCount"></small> <button type="button" class="linkbtn" id="checksAll">Show passed</button></h2>
+        <ul class="checks" id="checks"></ul>
+      </section>
+      <section data-steps="5">
         <h2>Export</h2>
         <div class="export">
           <select id="exportScope">
@@ -362,7 +379,7 @@
           <button type="button" id="stepBtn">STEP AP242</button>
         </div>
       </section>
-      <section>
+      <section data-steps="5">
         <h2>OpenModelica <small>system model</small></h2>
         <p class="note">Builds a Modelica package (gerotor, outlet volume, load restriction, tanks, speed source) from the
           current design and the case table of the Charts range, then opens it in OMEdit (local server needed).</p>

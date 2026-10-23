@@ -68,6 +68,8 @@
     return Object.assign({}, DEFAULTS);
   }
 
+  let lastOil = null;
+
   // ν(T) curve of the selected oil (log axis), datasheet points and the operating temperature.
   function drawOilCurve(oil, tC) {
     const box = $('oilCurve');
@@ -104,6 +106,7 @@
       form.elements.nu.value = oil.nu.toFixed(2);
       form.elements.rho.value = oil.rho.toFixed(0);
     }
+    lastOil = { oil, T: oilT };
     drawOilCurve(oil, oilT);
     const raw = readForm();
     if (Object.values(raw).some(v => typeof v === 'number' && !Number.isFinite(v))) return;
@@ -192,7 +195,12 @@
         ...(me.single ? [['Floor friction (single-sided, μ ' + f(p.faceMu, 2) + ')', f(me.MoutFloor * (p.N - 1) / p.N + me.MinFloor, 3) + ' N·m']] : []),
       );
     }
-    $('metrics').innerHTML = m.map(([k, v, big]) => `<dt>${k}</dt><dd${big ? ' class="big"' : ''}>${v}</dd>`).join('');
+    // Each result row is shown in the wizard steps it belongs to.
+    $('metrics').innerHTML = m.map(([k, v, big]) => {
+      const s = metricSteps(k);
+      return `<dt data-steps="${s}">${k}</dt><dd data-steps="${s}"${big ? ' class="big"' : ''}>${v}</dd>`;
+    }).join('');
+    updateKpis(p, ok, pr, ct, me);
 
     const d = [
       ['Inner rotor teeth', String(p.N - 1)],
@@ -226,11 +234,75 @@
     $('dims').innerHTML = d.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   }
 
+  // Wizard step(s) of a result row, by its label.
+  const STEP_OF = [
+    [/^(Displacement|Theoretical flow|Flow ripple$|Ideal torque|Hydraulic power|λ|Inner tip speed|Max tool)/, '1 5'],
+    [/^(Delivery flow|Volumetric efficiency|Port timing|Flow ripple \(port|Chamber pressure|Outlet pressure|Inlet port|Max speed)/, '2 3'],
+    [/^(Leak flows)/, '3'],
+    [/^(Shaft torque|Shaft side load|Contact force|Hertz|Sliding|Wear|Mechanical|Input power|Losses|Floor friction|Tooth-pass|Ripple harmonics)/, '4'],
+  ];
+  function metricSteps(label) {
+    for (const [re, s] of STEP_OF) if (re.test(label)) return s;
+    return '1 2 3 4';
+  }
+
+  // Key results shown on every step.
+  function updateKpis(p, ok, pr, ct, me) {
+    const nErr = ok ? res.checks.filter(c => c.level === 'err').length : 0;
+    const nWarn = ok ? res.checks.filter(c => c.level === 'warn').length : 0;
+    const k = [
+      ['Displacement', ok ? f(res.cc, 3) : '—', 'cm³/rev'],
+      ['Flow', ok ? f(pr && pr.sim ? pr.flowLpm : res.flowLpm, 2) : '—', 'L/min'],
+      ['Vol. efficiency', pr && pr.sim ? f(pr.portEfficiency * 100, 1) : '—', '%'],
+      ['Overall efficiency', me ? f(me.etaT * 100, 1) : '—', '%'],
+      ['Hertz max', ct ? f(ct.pmaxMax / 1e6, 0) : '—', 'MPa'],
+      ['Checks', ok ? (nErr ? `${nErr} error${nErr > 1 ? 's' : ''}` : nWarn ? `${nWarn} warning${nWarn > 1 ? 's' : ''}` : 'all OK') : 'invalid', '', nErr ? 'err' : nWarn ? 'warn' : ''],
+    ];
+    $('kpis').innerHTML = k.map(([n, v, u, cls]) => `<div class="kpi ${cls || ''}"><div class="k">${n}</div><div class="v">${v}${u ? `<small>${u}</small>` : ''}</div></div>`).join('');
+    // Design summary (Outputs step).
+    $('summary').innerHTML = [
+      ['Lobes / teeth', `${p.N} / ${p.N - 1}`], ['e / R / rp / c', `${f(p.e, 3)} / ${f(p.R, 3)} / ${f(p.rp, 3)} / ${f(p.c, 3)} mm`],
+      ['OD × width', `${f(p.OD, 2)} × ${f(p.b, 2)} mm`], ['Bore', `${f(p.bore, 2)} mm`],
+      ['Displacement', ok ? f(res.cc, 3) + ' cm³/rev' : '—'], ['Operating point', `${p.rpm} rpm, ${p.dp} bar`],
+      ['Oil', `${p.oil === 'custom' ? 'custom' : (G.OILS[p.oil] ? G.OILS[p.oil].label : 'datasheet')}, ν ${f(p.nu, 2)} cSt`],
+      ['Ports', p.portsOn ? [p.dblIn ? 'in ×2' : 'in ×1', p.dblOut ? 'out ×2' : 'out ×1', p.shadow ? 'shadow' : ''].filter(Boolean).join(', ') : 'off'],
+    ].map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+  }
+
+  // ------------------------------------------------------------- wizard steps
+  const STEP_INTRO = {
+    1: 'Rotor geometry: lobes, eccentricity, lobe radius and clearance, outer rotor body. Design Assist (top right) finds a geometry from a flow target.',
+    2: 'Port plate: port radii, timing, grooves, corner radii and porting type; operating point for the chamber pressure model.',
+    3: 'Fluid: oil from the library or your datasheet (ASTM D341), temperature, and the internal leakage gaps.',
+    4: 'Performance: friction and materials; efficiencies, contact stress and shaft loads at the operating point. "Create charts" sweeps speed × pressure.',
+    5: 'Outputs: drawings (PDF), CAD (STEP AP242, DXF, SVG), point data, the OpenModelica system model and the case table.',
+  };
+  let step = 1;
+  function setStep(n) {
+    step = Math.min(5, Math.max(1, n));
+    document.body.dataset.step = String(step);
+    document.querySelectorAll('#steps button').forEach(b => {
+      const s = +b.dataset.go;
+      b.classList.toggle('active', s === step);
+      b.classList.toggle('done', s < step);
+    });
+    $('stepIntro').textContent = STEP_INTRO[step];
+    $('stepBack').disabled = step === 1;
+    $('stepNext').textContent = step === 5 ? 'Back to geometry' : 'Next →';
+    try { localStorage.setItem('gerotor.step', String(step)); } catch (_) { /* storage unavailable */ }
+    // Canvases that were hidden have no size yet: redraw after layout.
+    requestAnimationFrame(() => { drawCharts(); if (lastOil) drawOilCurve(lastOil.oil, lastOil.T); });
+  }
+  document.querySelectorAll('#steps button').forEach(b => b.addEventListener('click', () => setStep(+b.dataset.go)));
+
   function updateChecks() {
     const order = { err: 0, warn: 1, info: 2, ok: 3 };
     const items = res.checks.slice().sort((a, b) => order[a.level] - order[b.level]);
     $('checks').innerHTML = items.map(c =>
       `<li class="${c.level}"><b>${c.title}</b><span>${c.detail}</span></li>`).join('');
+    const nOk = items.filter(c => c.level === 'ok').length;
+    $('checksCount').textContent = `${items.length - nOk} to review · ${nOk} passed`;
+    $('checksAll').textContent = $('checks').classList.contains('showall') ? 'Hide passed' : `Show passed (${nOk})`;
   }
 
   // ------------------------------------------------------------- view
@@ -459,7 +531,14 @@
     }
   })();
 
+  $('checksAll').addEventListener('click', () => { $('checks').classList.toggle('showall'); updateChecks(); });
+  $('stepBack').addEventListener('click', () => setStep(step - 1));
+  $('stepNext').addEventListener('click', () => setStep(step === 5 ? 1 : step + 1));
+
   writeForm(restore());
   recompute();
+  let savedStep = 1;
+  try { savedStep = +localStorage.getItem('gerotor.step') || 1; } catch (_) { /* storage unavailable */ }
+  setStep(savedStep);
   requestAnimationFrame(tick);
 })(window.Gerotor);
