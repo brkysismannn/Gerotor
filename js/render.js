@@ -98,6 +98,8 @@
         guide: cssVar('--guide'),
         contact: cssVar('--contact'),
         warn: cssVar('--warn'),
+        suctionDot: cssVar('--oil-in') || '#1f6fd6',
+        dischargeDot: cssVar('--oil-out') || '#e0761c',
       };
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -143,6 +145,11 @@
           ctx.globalAlpha = 1;
         }
       }
+
+      // Oil flow: particles entering through the suction port and leaving through the delivery port,
+      // carried with the chambers (outer-rotor rotation), clipped to the chambers.
+      if (opts.flow && this.res && this.res.ports && this.res.ports.suction) this.drawOil(t, px, col);
+      else this.particles = [];
 
       // Inner rotor body.
       ctx.beginPath();
@@ -205,6 +212,60 @@
           ctx.beginPath(); ctx.arc(c[0], c[1], 3.2 * px, 0, G.TAU); ctx.fill();
         }
       }
+    }
+
+    drawOil(t, px, col) {
+      const ctx = this.ctx, p = this.p, pr = this.res.ports;
+      if (!this.particles) this.particles = [];
+      let dt = this.lastT === undefined ? 0 : t - this.lastT;
+      if (Math.abs(dt) > 0.5) dt = 0;                      // jump (slider / reset): no motion
+      this.lastT = t;
+      const inside = (pt, poly) => {
+        let c = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          const a = poly[i], b = poly[j];
+          if ((a[1] > pt[1]) !== (b[1] > pt[1]) && pt[0] < (b[0] - a[0]) * (pt[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+        }
+        return c;
+      };
+      const spawn = (port, kind, n) => {
+        const ro = p.portRo, ri = Math.max(0.3 * ro, p.innerRoot - p.e);
+        for (let i = 0, tries = 0; i < n && tries < 8 * n; tries++) {
+          const a = port.a0 + Math.random() * (port.a1 - port.a0);
+          const r = Math.sqrt(ri * ri + Math.random() * (ro * ro - ri * ri));
+          const q = [r * Math.cos(a), r * Math.sin(a)];
+          if (!inside(q, port.outline)) continue;
+          this.particles.push({ r, a, kind, life: kind === 's' ? 1 : 0.9, v: 0.6 + 0.8 * Math.random() });
+          i++;
+        }
+      };
+      if (dt > 0) {
+        const n = Math.min(40, Math.round(900 * dt));
+        spawn(pr.suction, 's', n);
+        spawn(pr.delivery, 'd', Math.round(n * 0.7));
+      }
+      // Advance: carried with the chambers; suction particles drift outward (filling), delivery particles fade fast.
+      for (const q of this.particles) {
+        q.a += dt * q.v;
+        if (q.kind === 's') { q.life -= dt * 0.55; q.r += dt * 0.6; } else { q.life -= dt * 1.3; q.r -= dt * 0.4; }
+      }
+      this.particles = this.particles.filter(q => q.life > 0).slice(-2500);
+      // Clip to the chambers (cavity between the rotors) and draw.
+      ctx.save();
+      ctx.beginPath();
+      for (let k = 0; k < p.N; k++) this.polyPath(G.chamber(p, t + G.TAU * k / p.N, this.L, 24, 10).polygon);
+      ctx.clip();
+      const rad = 1.5 * px;
+      for (const kind of ['s', 'd']) {
+        ctx.fillStyle = kind === 's' ? col.suctionDot : col.dischargeDot;
+        for (const q of this.particles) {
+          if (q.kind !== kind) continue;
+          ctx.globalAlpha = Math.max(0, Math.min(1, q.life)) * 0.9;
+          ctx.beginPath(); ctx.arc(q.r * Math.cos(q.a), q.r * Math.sin(q.a), rad, 0, G.TAU); ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
     }
 
     polyPath(pts) {

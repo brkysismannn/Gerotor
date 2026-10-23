@@ -440,3 +440,13 @@ body[data-step="5"] .result-chart .chart { height: 170px; }
 .metrics dt.grp:first-child { margin-top: 0; }
 body[data-step="5"] .panel.results { grid-template-rows: none; grid-auto-rows: min-content; }
 
+
+/* ---- v5: angle charts below the animation (synced marker), shown with the model on every screen */
+.stage-charts { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 6px 12px 8px; border-top: 1px solid var(--border); max-height: 46%; overflow-y: auto; }
+.stage-chart h2 { font-size: 11.5px; margin: 0 0 3px; }
+.stage-chart h2 small { color: var(--text-muted); font-weight: 400; }
+.stage-chart .chart { height: 105px; }
+body[data-step="5"] .layout { grid-template-columns: minmax(0, 1fr) clamp(340px, 32vw, 520px); grid-template-areas: "results stage"; }
+body[data-step="5"] .layout > .stage { display: flex; }
+body[data-step="6"] .stage-charts { display: none; }
+:root { --oil-in: #1f6fd6; --oil-out: #e0761c; }

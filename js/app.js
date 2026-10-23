@@ -333,6 +333,7 @@
       chambers: $('optChambers').checked,
       ports: $('optPorts').checked,
       contacts: $('optContacts').checked,
+      flow: $('optFlow').checked,
       pitch: $('optPitch').checked,
       trochoid: $('optTrochoid').checked,
     };
@@ -523,6 +524,7 @@
   // Hook for other panels (Design Assist): load a set of parameters into the form.
   G.app = {
     getState() { return { params, res }; },
+    renderer,
     applyDesign(values) {
       writeForm(Object.assign(readForm(), values));
       renderer.fitted = false;

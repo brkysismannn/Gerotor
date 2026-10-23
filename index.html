@@ -297,9 +297,26 @@
           <label><input type="checkbox" id="optChambers" checked> Chambers</label>
           <label><input type="checkbox" id="optPorts" checked> Ports</label>
           <label><input type="checkbox" id="optContacts" checked> Contacts</label>
+          <label><input type="checkbox" id="optFlow" checked> Oil flow</label>
           <label><input type="checkbox" id="optPitch"> Pitch circles</label>
           <label><input type="checkbox" id="optTrochoid"> Trochoid</label>
         </div>
+      </div>
+      <div class="stage-charts" id="stageCharts">
+        <section data-steps="1 5" class="stage-chart">
+          <h2>Chamber area <small>mm² · housing angle</small></h2>
+          <canvas class="chart" id="areaChart"></canvas>
+          <div class="chart-legend" id="areaLegend"></div>
+        </section>
+        <section data-steps="2 3 5" class="stage-chart">
+          <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
+          <canvas class="chart" id="pressureChart"></canvas>
+        </section>
+        <section data-steps="2 3 4 5" class="stage-chart">
+          <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
+          <canvas class="chart" id="flowChart"></canvas>
+          <div class="chart-legend" id="flowLegend"></div>
+        </section>
       </div>
     </section>
 
@@ -340,20 +357,6 @@
         </form>
         <div class="note" id="mapStatus"></div>
         <div class="note" id="maxStatus"></div>
-      </section>
-      <section data-steps="5" class="result-chart">
-        <h2>Chamber area <small>mm² · housing angle</small></h2>
-        <canvas class="chart" id="areaChart"></canvas>
-        <div class="chart-legend" id="areaLegend"></div>
-      </section>
-      <section data-steps="5" class="result-chart">
-        <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
-        <canvas class="chart" id="pressureChart"></canvas>
-      </section>
-      <section data-steps="5" class="result-chart">
-        <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
-        <canvas class="chart" id="flowChart"></canvas>
-        <div class="chart-legend" id="flowLegend"></div>
       </section>
       <section data-steps="1 2 5">
         <h2>Dimensions</h2>
