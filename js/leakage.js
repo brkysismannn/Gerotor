@@ -86,12 +86,12 @@
     const Gbore = hAx > 0 && p.bore > 0 ? nFaces * sectorConductance(theta, hAx, mu, p.bore / 2 * 1e-3, p.innerRoot * 1e-3) : 0;
     const Gper = hAx > 0 ? nFaces * sectorConductance(theta, hAx, mu, p.Rv * 1e-3, p.OD / 2 * 1e-3) : 0;
     const boreVented = p.shaftVent !== false;
-    // Port lands (one face, or both with double fill).
+    // Port lands: on every face that carries the delivery port.
     let Gland = 0;
     if (hAx > 0 && ports && ports.suction) {
       const ri = Math.max(p.portRi, 0), w = (p.portRo - ri) * 1e-3, rm = 0.5 * (p.portRo + ri) * 1e-3;
       const landMax = ports.delivery.a0 - ports.suction.a1, landMin = ports.suction.a0 + TAU - ports.delivery.a1;
-      Gland = (p.doubleFill ? 2 : 1) * (slotConductance(w, hAx, mu, landMax * rm) + slotConductance(w, hAx, mu, landMin * rm));
+      Gland = (p.fillD || (p.doubleFill ? 2 : 1)) * (slotConductance(w, hAx, mu, landMax * rm) + slotConductance(w, hAx, mu, landMin * rm));
     }
     const Qland = Gland * (pD - pS);
 
@@ -107,7 +107,7 @@
       Qtip: new Float64Array(M), Qbore: new Float64Array(M), Qper: new Float64Array(M),
     };
 
-    const fill = p.doubleFill ? 2 : 1;
+    const fillS = p.fillS || (p.doubleFill ? 2 : 1), fillD = p.fillD || (p.doubleFill ? 2 : 1);
     for (let cycle = 0; cycle < 3; cycle++) {
       const last = cycle === 2;
       for (let j = 0; j < M; j++) {
@@ -118,8 +118,8 @@
             const jk = (j + k * step) % M;
             geo.V[k] = lerp(A, jk, f) * 1e-6 * b;
             geo.dV[k] = lerp(dA, jk, f) * 1e-6 * b * w2;
-            geo.as[k] = lerp(As, jk, f) * 1e-6 * fill;     // double fill: ports on both faces
-            geo.ad[k] = lerp(Ad, jk, f) * 1e-6 * fill;
+            geo.as[k] = lerp(As, jk, f) * 1e-6 * fillS;    // double-sided ports: both faces
+            geo.ad[k] = lerp(Ad, jk, f) * 1e-6 * fillD;
             geo.gt[k] = lerp(Gtip0, jk, f);                 // gap between k and k+1
             Pold[k] = P[k];
           }
@@ -183,7 +183,7 @@
     const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
     return Object.assign(rec, {
       pS, pD, pV, mu, Qland,
-      conductances: { Gbore, Gper, Gland, GtipMean: mean(Gtip0) },
+      conductances: { Gbore, Gper, Gland, GtipMean: mean(Gtip0) }, Gtip: Gtip0, boreVented,
       leakMean: { tip: mean(rec.Qtip), bore: mean(rec.Qbore), periphery: mean(rec.Qper), land: Qland },
     });
   }

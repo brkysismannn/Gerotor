@@ -387,6 +387,16 @@
       q.doubleFill = p.portLayout === 'double';
       q.faceSupport = p.portLayout === 'single' ? 'single' : 'balanced';
     }
+    // GDS porting checkboxes (take precedence): double-sided inlet / outlet, shadow ports.
+    // The rotors are balanced when the high-pressure side has a port or a shadow port on both faces.
+    if (p.dblIn !== undefined || p.dblOut !== undefined || p.shadow !== undefined) {
+      q.fillS = p.dblIn ? 2 : 1;
+      q.fillD = p.dblOut ? 2 : 1;
+      q.doubleFill = !!(p.dblIn && p.dblOut);
+      q.faceSupport = p.dblOut || p.shadow ? 'balanced' : 'single';
+    } else {
+      q.fillS = q.fillD = q.doubleFill ? 2 : 1;
+    }
     const innerRoot = p.R - p.e - p.rp - p.c;
     return Object.assign(q, {
       innerTip: p.R + p.e - p.rp - p.c,

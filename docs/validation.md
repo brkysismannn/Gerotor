@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **221 pass · 0 fail · 3 known** (224 tests, ~125 s).
+Last run: 2026-10-23 — **234 pass · 0 fail · 3 known** (237 tests, ~130 s).
 
 ## Change log of the numerical core
 
@@ -255,6 +255,28 @@ orifice, ripple varied 3–13 % with the sub-step count — so it was replaced.)
 | Outlet volume filters the ripple (0 → 20 → 200 cm³) | monotonic ✓ |
 | Mean outlet pressure = p_in + Δp | < 1 % |
 | xlsx writer: CRC-32 check value, ZIP records, column names; workbook opened by .NET ZipArchive, all parts well-formed XML | ✓ |
+
+## 21. Porting type, metering-groove depth, port corner radii (GDS "Port Design" parity)
+
+- **Porting type** as in GDS: double-sided inlet, double-sided outlet, shadow ports (independent). Inlet and
+  outlet orifice areas are doubled separately; the rotors are balanced when the outlet is double-sided or
+  shadow ports are present, otherwise pressed to the housing floor (§18).
+- **Groove depth d:** the groove cross-section w·d is in series with the groove's face opening A_o:
+  A_eff = (A_o⁻² + (w·d)⁻²)^(−½); d = 0 means full depth.
+- **Port fillet radii:** tangent fillets at the four port corners (radial edge × outer circle about O2 /
+  inner circle about O1). The corner material is removed from the opening area as a fan of signed triangles
+  from the corner point (exact also on the concave inner circle); the outline is drawn and exported filleted.
+
+| Test | Result |
+|---|---|
+| Flags: outlet-only, inlet-only (no shadow → pressed to floor), shadow-only | ✓ |
+| Double-sided inlet halves the inlet port velocity | exact |
+| Double-sided outlet lowers the delivery throttling peak (3000 rpm) | ✓ |
+| Groove depth series law (w·d = A_o → A_o/√2) | exact |
+| Very deep groove = full-depth groove; 0.05 mm deep groove relieves the trapped peak less | ✓ |
+| Filleted port: clipped opening of a covering chamber = outline area | < 0.1 % |
+| Two outer corners (r_f 1 mm, R_o 28.5 mm): removed area vs exact corner area (sector − quadrilateral − fillet sector) | 0.4585 vs 0.4539 mm² (0.005 mm², chord discretisation of the port arc) |
+| Oversized fillet rejected (sharp corners used, error shown) | ✓ |
 
 ## 6. Export
 

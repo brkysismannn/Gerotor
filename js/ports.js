@@ -134,20 +134,114 @@
   }
 
   function makePort(p, a0, a1) {
+    const rf = Math.max(0, p.portFillet || 0);
+    const pieces = sectorPieces(p, a0, a1);
+    if (rf > 0) {
+      const fp = filletedPort(p, a0, a1, rf);
+      if (fp.error) return { a0, a1, outline: portOutline(p, a0, a1), area: area(portOutline(p, a0, a1)), pieces, filletError: fp.error };
+      return { a0, a1, outline: fp.outline, area: area(fp.outline), pieces, waste: fp.waste };
+    }
     const outline = portOutline(p, a0, a1);
-    return {
-      a0, a1, outline,
-      area: area(outline),
-      pieces: sectorPieces(p, a0, a1),
+    return { a0, a1, outline, area: area(outline), pieces };
+  }
+
+  /*
+   * Port corner radii (GDS "Port Fillet Radii"). Each corner between a radial edge (angle a, inward
+   * normal n) and a boundary circle gets a tangent fillet of radius rf:
+   *   outer circle (O2, Ro):        C = s·u + rf·n,  |C| = Ro − rf
+   *   inner circle (O1, Ri), port outside it:  |C − O1| = Ri + rf
+   * Tangent points: T_line = s·u on the edge, T_circ on the circle. The material left in the corner
+   * (corner point K, T_line, fillet arc, T_circ, boundary arc back to K) is removed from the opening
+   * area as a fan of signed triangles from K (exact also where the boundary arc is concave).
+   */
+  function filletedPort(p, a0, a1, rf, nArc) {
+    nArc = nArc || 12;
+    const Ro = p.portRo, Ri = p.portRi, O1 = [p.e, 0];
+    const corner = (a, side, which) => {
+      const u = [Math.cos(a), Math.sin(a)];
+      const n = side > 0 ? [-u[1], u[0]] : [u[1], -u[0]];          // into the port
+      let s, Tc, K, ctr, rad;
+      if (which === 'outer') {
+        if (!(Ro - rf > rf)) return null;
+        s = Math.sqrt((Ro - rf) ** 2 - rf * rf);
+        const C = [s * u[0] + rf * n[0], s * u[1] + rf * n[1]];
+        Tc = [C[0] * Ro / (Ro - rf), C[1] * Ro / (Ro - rf)];
+        K = [Ro * u[0], Ro * u[1]];
+        ctr = [0, 0]; rad = Ro;
+        return { C, s, Tl: [s * u[0], s * u[1]], Tc, K, ctr, rad };
+      }
+      const w = [rf * n[0] - O1[0], rf * n[1] - O1[1]], uw = u[0] * w[0] + u[1] * w[1];
+      const disc = uw * uw - (w[0] * w[0] + w[1] * w[1]) + (Ri + rf) ** 2;
+      if (disc < 0) return null;
+      s = -uw + Math.sqrt(disc);
+      const C = [s * u[0] + rf * n[0], s * u[1] + rf * n[1]];
+      const d = Math.hypot(C[0] - O1[0], C[1] - O1[1]);
+      Tc = [O1[0] + (C[0] - O1[0]) * Ri / d, O1[1] + (C[1] - O1[1]) * Ri / d];
+      const k = rayToInner(p, a);
+      K = [k * u[0], k * u[1]];
+      ctr = O1; rad = Ri;
+      return { C, s, Tl: [s * u[0], s * u[1]], Tc, K, ctr, rad };
     };
+    // Points on the short arc of circle (c, r) from P to Q (excluding P, including Q).
+    const arc = (c, r, P, Q, n) => {
+      const t0 = Math.atan2(P[1] - c[1], P[0] - c[0]), t1 = Math.atan2(Q[1] - c[1], Q[0] - c[0]);
+      const d = wrapPi(t1 - t0), out = [];
+      for (let i = 1; i <= n; i++) { const t = t0 + d * i / n; out.push([c[0] + r * Math.cos(t), c[1] + r * Math.sin(t)]); }
+      return out;
+    };
+    const hasInner = Ri > 0;
+    const c0o = corner(a0, +1, 'outer'), c1o = corner(a1, -1, 'outer');
+    const c0i = hasInner ? corner(a0, +1, 'inner') : null, c1i = hasInner ? corner(a1, -1, 'inner') : null;
+    if (!c0o || !c1o || (hasInner && (!c0i || !c1i))) return { error: 'Port fillet radius too large for the port.' };
+    const sIn0 = hasInner ? c0i.s : 0, sIn1 = hasInner ? c1i.s : 0;
+    if (!(c0o.s > sIn0 + 1e-9 && c1o.s > sIn1 + 1e-9)) return { error: 'Port fillet radius too large for the radial port width.' };
+    const angTc0 = Math.atan2(c0o.Tc[1], c0o.Tc[0]), angTc1 = Math.atan2(c1o.Tc[1], c1o.Tc[0]);
+    let dA = wrapPi(angTc1 - angTc0); if (dA <= 0) dA += TAU;
+    if (!(dA < a1 - a0 + 1e-9)) return { error: 'Port fillet radius too large for the port angle.' };
+
+    // Outline (CCW).
+    const out = [];
+    const nOuter = 96;
+    for (let i = 0; i <= nOuter; i++) { const t = angTc0 + dA * i / nOuter; out.push([Ro * Math.cos(t), Ro * Math.sin(t)]); }
+    out.push(...arc(c1o.C, rf, c1o.Tc, c1o.Tl, nArc));
+    if (hasInner) {
+      out.push(...arc(c1i.C, rf, c1i.Tl, c1i.Tc, nArc));
+      const f1 = Math.atan2(c1i.Tc[1], c1i.Tc[0] - p.e), f0 = Math.atan2(c0i.Tc[1], c0i.Tc[0] - p.e);
+      let d = f0 - f1;
+      while (d > 0) d -= TAU;
+      while (d <= -TAU) d += TAU;
+      for (let i = 1; i < 96; i++) { const f = f1 + d * i / 96; out.push([p.e + Ri * Math.cos(f), Ri * Math.sin(f)]); }
+      out.push(c0i.Tc);
+      out.push(...arc(c0i.C, rf, c0i.Tc, c0i.Tl, nArc));
+    } else {
+      out.push([0, 0]);
+    }
+    out.push(...arc(c0o.C, rf, c0o.Tl, c0o.Tc, nArc).slice(0, -1));
+
+    // Corner waste as signed fan triangles from K.
+    const waste = [];
+    for (const c of hasInner ? [c0o, c1o, c0i, c1i] : [c0o, c1o]) {
+      const poly = [c.Tl, ...arc(c.C, rf, c.Tl, c.Tc, nArc), ...arc(c.ctr, c.rad, c.Tc, c.K, 6)];
+      const orient = Math.sign(G.polygonArea([c.K, ...poly]));      // overall orientation of the waste region
+      for (let i = 0; i + 1 < poly.length; i++) {
+        const tri = [c.K, poly[i], poly[i + 1]];
+        const sgn = G.polygonArea(tri);
+        if (Math.abs(sgn) < 1e-14) continue;
+        waste.push(sgn > 0 ? { tri, sign: orient } : { tri: [tri[0], tri[2], tri[1]], sign: -orient });
+      }
+    }
+    return { outline: out, waste };
   }
 
   /*
    * Relief / metering groove: a thin annular strip of radial width w on the port's mid radius,
    * running from a port edge into the land by `lenDeg` (dir = +1 forward, −1 backward).
    * Split into ≤ 2° quadrilaterals (convex) for clipping; exact area = w · r_mid · Δθ.
+   * Depth d > 0: the fluid reaching the chamber also passes the groove cross-section w·d, in series
+   * with the face opening A_o of the groove over the chamber:  A_eff = (A_o⁻² + (w·d)⁻²)^(−½).
+   * d = 0: groove as deep as the port (face opening only).
    */
-  function makeGroove(p, edge, dir, lenDeg, w) {
+  function makeGroove(p, edge, dir, lenDeg, w, depth) {
     if (!(lenDeg > 0) || !(w > 0)) return null;
     const rIn0 = Math.max(rayToInner(p, edge), 0), rm = 0.5 * (p.portRo + rIn0);
     const r1 = rm - w / 2, r2 = rm + w / 2;
@@ -162,8 +256,12 @@
       const a = b0 + (b1 - b0) * i / (4 * n);
       outlineIn.push(pt(r1, a)); outlineOut.push(pt(r2, a));
     }
-    return { pieces, outline: outlineIn.concat(outlineOut.reverse()), area: w * rm * (b1 - b0), rm, w, a0: b0, a1: b1 };
+    return { pieces, outline: outlineIn.concat(outlineOut.reverse()), area: w * rm * (b1 - b0), rm, w, a0: b0, a1: b1,
+      cross: depth > 0 ? w * depth : Infinity };
   }
+
+  // Effective opening of a groove: face overlap in series with the groove cross-section.
+  const grooveEffective = (aOpen, cross) => aOpen > 0 && Number.isFinite(cross) ? 1 / Math.sqrt(1 / (aOpen * aOpen) + 1 / (cross * cross)) : aOpen;
 
   // Area of chamber polygon open to a port: (chamber ∩ sector) − (… ∩ inner disk) + grooves.
   function openArea(poly, port, disk) {
@@ -174,8 +272,12 @@
       s += area(c);
       if (disk) s -= area(clipConvex(c, disk));
     }
+    // Rounded corners: remove the corner material (signed fan triangles, see filletedPort).
+    for (const w of port.waste || []) s -= w.sign * area(clipConvex(poly, w.tri));
     for (const g of port.grooves || []) {
-      for (const piece of g.pieces) s += area(clipConvex(poly, piece));
+      let a = 0;
+      for (const piece of g.pieces) a += area(clipConvex(poly, piece));
+      s += grooveEffective(a, g.cross);
     }
     return Math.max(0, s);
   }
@@ -276,10 +378,13 @@
 
     out.suction = makePort(p, s0, s1);
     out.delivery = makePort(p, d0, d1);
+    const fe = out.suction.filletError || out.delivery.filletError;
+    if (fe) push('err', 'Port fillet', fe + ' Sharp corners are used.');
     // Relief grooves into the lands: suction start/end, delivery start/end.
     const w = p.grooveW || 0;
-    out.suction.grooves = [makeGroove(p, s0, -1, p.gSucStart, w), makeGroove(p, s1, +1, p.gSucEnd, w)].filter(Boolean);
-    out.delivery.grooves = [makeGroove(p, d0, -1, p.gDelStart, w), makeGroove(p, d1, +1, p.gDelEnd, w)].filter(Boolean);
+    const gd = p.grooveD || 0;
+    out.suction.grooves = [makeGroove(p, s0, -1, p.gSucStart, w, gd), makeGroove(p, s1, +1, p.gSucEnd, w, gd)].filter(Boolean);
+    out.delivery.grooves = [makeGroove(p, d0, -1, p.gDelStart, w, gd), makeGroove(p, d1, +1, p.gDelEnd, w, gd)].filter(Boolean);
 
     // Port radii vs rotors.
     if (p.portRo > p.Rv + 1e-9) push('warn', 'Port beyond outer valley', `Port outer radius ${f(p.portRo)} > Rv ${f(p.Rv)}; reduces outer rotor face sealing.`);
@@ -312,9 +417,9 @@
     if (swingPct > 2) push('warn', 'Trapped volume change', `Volume changes by ${f(swingPct, 1)} % of the stroke while sealed from both ports.`);
 
     // Inlet velocity (Nichols / Gamez-Montero: below 2 m/s).
-    const fill = p.doubleFill ? 2 : 1;
+    const fill = p.fillS || (p.doubleFill ? 2 : 1);
     out.inletVelocity = res.flowLpm * 1000 / (60 * out.suction.area * fill);
-    if (out.inletVelocity > 2) push('warn', 'High inlet port velocity', `${f(out.inletVelocity)} m/s > 2 m/s; enlarge the port or use double fill.`);
+    if (out.inletVelocity > 2) push('warn', 'High inlet port velocity', `${f(out.inletVelocity)} m/s > 2 m/s; enlarge the port or use a double-sided inlet.`);
     else push('ok', 'Inlet port velocity', `${f(out.inletVelocity)} m/s (limit 2 m/s).`);
 
     // Pressure model.

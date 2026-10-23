@@ -11,13 +11,30 @@
 (function (G) {
   'use strict';
 
+  // group: shown as <optgroup> in the fluid list. Engine-oil grades use the ν40/ν100 pairs of the
+  // GT-SUITE fluid library names (e.g. "Oil-5W30-62-10cSt"); densities are typical values.
   const OILS = {
-    vg32: { label: 'ISO VG 32 (HLP 32)', nu40: 32, nu100: 5.4, rho15: 870 },
-    vg46: { label: 'ISO VG 46 (HLP 46)', nu40: 46, nu100: 6.8, rho15: 875 },
-    vg68: { label: 'ISO VG 68 (HLP 68)', nu40: 68, nu100: 8.7, rho15: 880 },
-    sae5w30: { label: 'SAE 5W-30 engine oil', nu40: 62, nu100: 10.5, rho15: 855 },
-    mil23699: { label: 'MIL-PRF-23699 turbine oil', nu40: 25, nu100: 5.0, rho15: 1000 },
-    atf: { label: 'ATF (Dexron type)', nu40: 34, nu100: 7.4, rho15: 860 },
+    vg10: { group: 'Hydraulic (ISO VG)', label: 'ISO VG 10 (HLP 10)', nu40: 10, nu100: 2.6, rho15: 850 },
+    vg15: { group: 'Hydraulic (ISO VG)', label: 'ISO VG 15 (HLP 15)', nu40: 15, nu100: 3.5, rho15: 860 },
+    vg22: { group: 'Hydraulic (ISO VG)', label: 'ISO VG 22 (HLP 22)', nu40: 22, nu100: 4.3, rho15: 865 },
+    vg32: { group: 'Hydraulic (ISO VG)', label: 'ISO VG 32 (HLP 32)', nu40: 32, nu100: 5.4, rho15: 870 },
+    vg46: { group: 'Hydraulic (ISO VG)', label: 'ISO VG 46 (HLP 46)', nu40: 46, nu100: 6.8, rho15: 875 },
+    vg68: { group: 'Hydraulic (ISO VG)', label: 'ISO VG 68 (HLP 68)', nu40: 68, nu100: 8.7, rho15: 880 },
+    vg100: { group: 'Hydraulic (ISO VG)', label: 'ISO VG 100 (HLP 100)', nu40: 100, nu100: 11.1, rho15: 885 },
+    hvlp32: { group: 'Hydraulic (ISO VG)', label: 'HVLP 32, VI ≈ 164', nu40: 32.7, nu100: 6.63, rho15: 847 },
+    sae0w20: { group: 'Engine oil (SAE)', label: 'SAE 0W-20 (44 / 8.5 cSt)', nu40: 44, nu100: 8.5, rho15: 845 },
+    sae0w30: { group: 'Engine oil (SAE)', label: 'SAE 0W-30 (72 / 12 cSt)', nu40: 72, nu100: 12, rho15: 850 },
+    sae5w20: { group: 'Engine oil (SAE)', label: 'SAE 5W-20 (43 / 8 cSt)', nu40: 43, nu100: 8, rho15: 850 },
+    sae5w30: { group: 'Engine oil (SAE)', label: 'SAE 5W-30 (62 / 10 cSt)', nu40: 62, nu100: 10, rho15: 855 },
+    sae5w40: { group: 'Engine oil (SAE)', label: 'SAE 5W-40 (85 / 14 cSt)', nu40: 85, nu100: 14, rho15: 855 },
+    sae10w30: { group: 'Engine oil (SAE)', label: 'SAE 10W-30 (77 / 11 cSt)', nu40: 77, nu100: 11, rho15: 865 },
+    sae10w40: { group: 'Engine oil (SAE)', label: 'SAE 10W-40 (82 / 15 cSt)', nu40: 82, nu100: 15, rho15: 865 },
+    sae15w40: { group: 'Engine oil (SAE)', label: 'SAE 15W-40 (123 / 16 cSt)', nu40: 123, nu100: 16, rho15: 875 },
+    sae20w50: { group: 'Engine oil (SAE)', label: 'SAE 20W-50 (114 / 20 cSt)', nu40: 114, nu100: 20, rho15: 880 },
+    sae25w40: { group: 'Engine oil (SAE)', label: 'SAE 25W-40 (145 / 15 cSt)', nu40: 145, nu100: 15, rho15: 880 },
+    atf: { group: 'Other', label: 'ATF (Dexron type)', nu40: 34, nu100: 7.4, rho15: 860 },
+    mil23699: { group: 'Other', label: 'MIL-PRF-23699 turbine oil', nu40: 25, nu100: 5.0, rho15: 1000 },
+    mil5606: { group: 'Other', label: 'MIL-PRF-5606 aviation hydraulic', nu40: 14, nu100: 5.2, rho15: 860 },
   };
 
   const NU_MIN = 2;                                   // lower validity limit of the 0.7 form [cSt]

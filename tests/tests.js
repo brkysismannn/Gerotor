@@ -796,6 +796,12 @@
     check(S, 'Inconsistent third point (non-Walther) is flagged', G.userOil(oil({ uT3: 0, uNu3: 100 }), 40).notes.some(n => /deviate/.test(n)));
     check(S, 'Both points at one temperature → error', !!G.userOil(oil({ uT2: 40 }), 40).error);
     record(S, 'Density ρ(T) = ρ15·(1 − 6.5·10⁻⁴·(T − 15))', 870 * (1 - 6.5e-4 * 65), G.userOil(oil({}), 80).rho, 1e-9);
+    // Fluid library: every entry is consistent and its curve passes through its datasheet values.
+    const lib = Object.entries(G.OILS);
+    let worst = 0;
+    for (const [, o] of lib) worst = Math.max(worst, Math.abs(G.viscosityAt(o.nu40, o.nu100, 40) / o.nu40 - 1), Math.abs(G.viscosityAt(o.nu40, o.nu100, 100) / o.nu100 - 1));
+    record(S, `Fluid library (${lib.length} oils): curves through ν40 and ν100`, 0, 100 * worst, 1e-9, { abs: true, unit: '%' });
+    check(S, 'Fluid library: ν100 < ν40, ρ15 > 0, group set for every entry', lib.every(([, o]) => o.nu100 < o.nu40 && o.rho15 > 0 && o.group));
   }
 
   // ------------------------------------------------------------ 20. GDS results panel: tool Ø, outlet ripple, charts, Excel
@@ -834,6 +840,53 @@
     check(S, 'xlsx: column names A, Z, AA, AZ, BA', ['A', 'Z', 'AA', 'AZ', 'BA'].join() === [0, 25, 26, 51, 52].map(G.xlsx.colName).join());
   }
 
+  // ------------------------------------------------------------ 21. GDS porting options: double-sided in/out, shadow, groove depth, port fillets
+
+  function suitePorting() {
+    const S = '21 · Porting type, groove depth, port fillets';
+    const P = { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5, portsOn: true };
+    const d = x => design(Object.assign({}, P, x));
+    const f = (x, k) => d(x)[k];
+    check(S, 'Double-sided outlet only: outlet ×2, inlet ×1, rotors balanced', f({ dblIn: false, dblOut: true, shadow: false }, 'fillD') === 2 && f({ dblIn: false, dblOut: true, shadow: false }, 'fillS') === 1 && f({ dblIn: false, dblOut: true, shadow: false }, 'faceSupport') === 'balanced');
+    check(S, 'Double-sided inlet only, no shadow ports: rotors pressed to floor', f({ dblIn: true, dblOut: false, shadow: false }, 'faceSupport') === 'single' && f({ dblIn: true, dblOut: false, shadow: false }, 'fillS') === 2);
+    check(S, 'Shadow ports only: balanced, single orifices', f({ dblIn: false, dblOut: false, shadow: true }, 'faceSupport') === 'balanced' && f({ shadow: true, dblIn: false, dblOut: false }, 'fillD') === 1);
+    const one = G.analyse(d({ dblIn: false, dblOut: false, shadow: true })).ports, din = G.analyse(d({ dblIn: true, dblOut: false, shadow: true })).ports;
+    record(S, 'Double-sided inlet halves the inlet port velocity', 0.5, din.inletVelocity / one.inletVelocity, 1e-9);
+    const dout = G.analyse(d({ dblIn: false, dblOut: true, shadow: false, rpm: 3000 })).ports, one3 = G.analyse(d({ dblIn: false, dblOut: false, shadow: true, rpm: 3000 })).ports;
+    check(S, `Double-sided outlet lowers the delivery throttling peak (${one3.pMaxBar.toFixed(1)} → ${dout.pMaxBar.toFixed(1)} bar)`, dout.pMaxBar < one3.pMaxBar);
+
+    // Groove depth: series resistance of the groove cross-section.
+    // A fully covered groove (open area A_o) with depth chosen so that w·d = A_o gives A_eff = A_o/√2.
+    const sq = [[-99, -99], [99, -99], [99, 99], [-99, 99]], wG = 1;
+    const Ao = G.portOpenArea(sq, { pieces: [], grooves: [G.makeGroove(design(P), 1, -1, 10, wG, 0)] }, null);
+    const Aeff = G.portOpenArea(sq, { pieces: [], grooves: [G.makeGroove(design(P), 1, -1, 10, wG, Ao / wG)] }, null);
+    record(S, 'Groove depth: A_eff = (A_o⁻² + (w·d)⁻²)^(−½) → A_o/√2 when w·d = A_o', Math.SQRT1_2, Aeff / Ao, 1e-9);
+    const trapG = x => G.analyse(d(Object.assign({ delStart: 16, gDelStart: 15, grooveW: 1 }, x))).ports.pMaxBar;
+    const full = trapG({ grooveD: 0 }), deep = trapG({ grooveD: 50 }), shallow = trapG({ grooveD: 0.05 });
+    record(S, 'Very deep groove = full-depth groove (trapped peak)', full, deep, 0.5);
+    check(S, `Shallow groove (0.05 mm) relieves less (${full.toFixed(0)} → ${shallow.toFixed(0)} bar)`, shallow > full + 1);
+
+    // Port fillets.
+    const big = [[-200, -200], [200, -200], [200, 200], [-200, 200]];
+    const pf = d({ portFillet: 2 }), pr = G.analyse(Object.assign({}, pf, { rpm: 0 })).ports;
+    const disk = Array.from({ length: 720 }, (_, i) => [pf.e + pf.portRi * Math.cos(TAU * i / 720), pf.portRi * Math.sin(TAU * i / 720)]);
+    record(S, 'Filleted port: opening area of a covering chamber = outline area', pr.suction.area, G.portOpenArea(big, pr.suction, disk), 0.1);
+    // Apex sector (no inner arc): two outer corners of 90°; waste → 2·rf²·(1 − π/4) for Ro ≫ rf.
+    const ap = d({ portRiAuto: false, portRi: 0 }), apf = d({ portRiAuto: false, portRi: 0, portFillet: 1 });
+    const a0 = G.analyse(Object.assign({}, ap, { rpm: 0 })).ports.suction, a1 = G.analyse(Object.assign({}, apf, { rpm: 0 })).ports.suction;
+    // Exact corner area between radial edge, outer arc (Ro) and fillet (rf): circle sector O2 from T_c to K
+    // minus quadrilateral O2-T_l-C-T_c minus the fillet sector at C.
+    const Ro = apf.portRo, rf = 1, s = Math.sqrt((Ro - rf) ** 2 - rf * rf);
+    const C = [s, rf], Tl = [s, 0], Tc = [C[0] * Ro / (Ro - rf), C[1] * Ro / (Ro - rf)];
+    const quad = Math.abs(G.polygonArea([[0, 0], Tl, C, Tc]));
+    const phiF = Math.acos(((Tl[0] - C[0]) * (Tc[0] - C[0]) + (Tl[1] - C[1]) * (Tc[1] - C[1])) / (rf * rf));
+    const corner1 = 0.5 * Ro * Ro * Math.atan2(Tc[1], Tc[0]) - quad - 0.5 * rf * rf * phiF;
+    record(S, `Outer corners: removed area = exact corner area ×2 (rf 1, Ro ${Ro.toFixed(1)}; flat limit 2·rf²(1−π/4) = ${(2 * (1 - Math.PI / 4)).toFixed(3)})`,
+      2 * corner1, G.portOpenArea(big, a0, null) - G.portOpenArea(big, a1, null), 0.01,
+      { abs: true, unit: 'mm²', note: 'port outer arc is a 24-chord polygon per 90° piece' });
+    check(S, 'Oversized port fillet is rejected', G.analyse(d({ portFillet: 6 })).ports.checks.some(c => c.title === 'Port fillet'));
+  }
+
   // ------------------------------------------------------------ 6. export
 
   function suiteExport() {
@@ -852,7 +905,7 @@
   function runAll() {
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults]) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting]) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };

@@ -169,16 +169,20 @@
             <label>Groove at delivery end <span class="unit">°</span>
               <input name="gDelEnd" type="number" min="0" step="0.5" value="0"></label>
           </div>
-          <label>Groove width <span class="unit">mm</span>
-            <input name="grooveW" type="number" min="0" step="0.1" value="1"></label>
+          <div class="grid2">
+            <label>Groove width <span class="unit">mm</span>
+              <input name="grooveW" type="number" min="0" step="0.1" value="1"></label>
+            <label>Groove depth (0 = full) <span class="unit">mm</span>
+              <input name="grooveD" type="number" min="0" step="0.05" value="0"></label>
+          </div>
+          <label>Port fillet radii (corners) <span class="unit">mm</span>
+            <input name="portFillet" type="number" min="0" step="0.1" value="0"></label>
           <label>Outlet volume (pressure ripple) <span class="unit">cm³</span>
             <input name="outletVol" type="number" min="0" step="1" value="0"></label>
-          <label>Port arrangement
-            <select name="portLayout">
-              <option value="single">One-sided (rotors pressed to floor)</option>
-              <option value="shadow" selected>One-sided + shadow ports (balanced)</option>
-              <option value="double">Double-sided (ports on both faces)</option>
-            </select></label>
+          <p class="note">Porting type (as GDS). Without a double-sided outlet or shadow ports the rotors are pressed to the housing floor.</p>
+          <label class="inline"><input name="dblIn" type="checkbox"> Double-sided inlet port</label>
+          <label class="inline"><input name="dblOut" type="checkbox"> Double-sided outlet port</label>
+          <label class="inline"><input name="shadow" type="checkbox" checked> Shadow ports</label>
         </fieldset>
         <fieldset>
           <legend>Fluid</legend>
@@ -187,12 +191,7 @@
               <select name="oil">
                 <option value="custom">Custom (ν, ρ below)</option>
                 <option value="user">My oil — datasheet (ASTM D341)</option>
-                <option value="vg32">ISO VG 32</option>
-                <option value="vg46">ISO VG 46</option>
-                <option value="vg68">ISO VG 68</option>
-                <option value="sae5w30">SAE 5W-30</option>
-                <option value="mil23699">MIL-PRF-23699</option>
-                <option value="atf">ATF</option>
+                <!-- library entries are added from js/fluid.js -->
               </select></label>
             <label>Oil temperature <span class="unit">°C</span>
               <input name="oilT" type="number" step="5" value="40"></label>

@@ -49,7 +49,7 @@
   const coulombRingTorque = (muF, q, rIn, rOut) => (rOut > rIn && q > 0) ? muF * q * TAU / 3 * (rOut ** 3 - rIn ** 3) : 0;
 
   // Rotors pressed to the floor: single-sided ports without shadow ports or double fill.
-  const singleSided = p => p.faceSupport === 'single' && !p.doubleFill;
+  const singleSided = p => p.faceSupport === 'single' && !p.doubleFill && !(p.fillD > 1);
 
   function computeMechanical(p, res) {
     const mm = 1e-3, tau = (p.N - 1) / p.N;

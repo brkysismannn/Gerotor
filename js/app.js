@@ -6,8 +6,8 @@
     N: 7, e: 3, R: 30, rp: 8, c: 0.03, Rv: 28, RvAuto: true, RvClear: 0.5, fillet: 0,
     b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100,
     portsOn: true, portRo: 28, portRoAuto: true, portRi: 19, portRiAuto: true,
-    sucStart: 0, sucEnd: 0, delStart: 0, delEnd: 0, portLayout: 'shadow', outletVol: 0,
-    gSucStart: 0, gSucEnd: 0, gDelStart: 0, gDelEnd: 0, grooveW: 1,
+    sucStart: 0, sucEnd: 0, delStart: 0, delEnd: 0, dblIn: false, dblOut: false, shadow: true, outletVol: 0,
+    gSucStart: 0, gSucEnd: 0, gDelStart: 0, gDelEnd: 0, grooveW: 1, grooveD: 0, portFillet: 0,
     pIn: 1, pVap: 0.2, rho: 860, bulk: 1400, Cd: 0.7, nu: 30,
     leakOn: true, axialClr: 0.05, shaftVent: true, tipGapModel: 'backlash',
     Ein: 210, nuIn: 0.3, Eout: 210, nuOut: 0.3,
@@ -49,10 +49,13 @@
     try { localStorage.setItem(STORE_KEY, JSON.stringify(p)); } catch (_) { /* storage unavailable */ }
   }
 
-  // Older parameter files: doubleFill / faceSupport → portLayout.
+  // Older parameter files: doubleFill / faceSupport / portLayout → porting checkboxes.
   function migrate(s) {
-    if (s && !s.portLayout && ('doubleFill' in s || 'faceSupport' in s)) {
-      s.portLayout = s.doubleFill ? 'double' : (s.faceSupport === 'single' ? 'single' : 'shadow');
+    if (s && !('dblIn' in s)) {
+      let layout = s.portLayout;
+      if (!layout && ('doubleFill' in s || 'faceSupport' in s)) layout = s.doubleFill ? 'double' : (s.faceSupport === 'single' ? 'single' : 'shadow');
+      if (layout) Object.assign(s, { dblIn: layout === 'double', dblOut: layout === 'double', shadow: layout === 'shadow' });
+      delete s.portLayout;
     }
     return s;
   }
@@ -430,6 +433,17 @@
   });
   ro.observe(renderer.canvas);
   renderer.resize();
+
+  // Fluid library → <select name="oil"> (grouped).
+  (function fillOilList() {
+    const sel = form.elements.oil, groups = {};
+    for (const [key, o] of Object.entries(G.OILS)) {
+      if (!groups[o.group]) { groups[o.group] = document.createElement('optgroup'); groups[o.group].label = o.group; sel.appendChild(groups[o.group]); }
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = o.label;
+      groups[o.group].appendChild(opt);
+    }
+  })();
 
   writeForm(restore());
   recompute();

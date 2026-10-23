@@ -95,7 +95,7 @@
     const rpmTip = 60 * V / (2 * Math.PI * rTip);
     let rpmGallery = NaN, U = NaN, D = NaN;
     if (res.ports && res.ports.suction) {
-      const A = res.ports.suction.area * 1e-6 * (p.doubleFill ? 2 : 1);
+      const A = res.ports.suction.area * 1e-6 * (p.fillS || (p.doubleFill ? 2 : 1));
       D = Math.sqrt(4 * A / Math.PI);
       U = 2000 * p.nu * 1e-6 / D;
       rpmGallery = U * A / (res.cc * 1e-6) * 60;
@@ -110,7 +110,7 @@
     const limit = opt.voidLimit || 0.005, dp = opt.dp === undefined ? p.dp : opt.dp;
     let lo = opt.rpmMin || 100, hi = opt.rpmMax || 20000, evals = 0;
     const ok = rpm => { evals++; return voidAt(p, res, rpm, dp) <= limit; };
-    const fill = p.doubleFill ? 2 : 1, qPerRpm = res.cc * 1e-6 / 60;       // m³/s per rpm
+    const fill = p.fillS || (p.doubleFill ? 2 : 1), qPerRpm = res.cc * 1e-6 / 60;       // m³/s per rpm
     const rpmInlet = res.ports.suction ? 2 * res.ports.suction.area * 1e-6 * fill / qPerRpm : NaN;
     const gds = gdsCavitationLimits(p, res);
     if (!ok(lo)) return { rpm: NaN, below: lo, rpmInlet, evals, limit, gds };
