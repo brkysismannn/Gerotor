@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gerotor Design Tool</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Gerotor Design Tool</h1>
+    <span class="subtitle">Classic gerotor · trochoidal profile</span>
+    <button id="assistOpen" class="primary topbtn" type="button">Design Assist</button>
+    <button id="themeToggle" class="ghost" type="button" title="Toggle theme">◐</button>
+  </header>
+
+  <dialog id="assistDlg">
+    <div class="dlg-head">
+      <h2>Design Assist</h2>
+      <span class="subtitle">Find geometries that meet a flow target within packaging limits</span>
+      <button type="button" class="ghost" id="assistClose" title="Close">✕</button>
+    </div>
+    <div class="dlg-body">
+      <form id="assistForm" class="params" autocomplete="off">
+        <fieldset>
+          <legend>Requirement</legend>
+          <div class="grid2">
+            <label>Flow <span class="unit">L/min</span><input name="flow" type="number" min="0" step="0.5" value="15"></label>
+            <label>at speed <span class="unit">rpm</span><input name="rpm" type="number" min="1" step="50" value="1000"></label>
+            <label>Vol. efficiency <span class="unit">%</span><input name="volEff" type="number" min="10" max="100" step="1" value="100"></label>
+            <label>Objective
+              <select name="objective"><option value="ripple">Lowest flow ripple</option><option value="compact">Smallest outer Ø</option><option value="contact">Lowest contact stress</option></select></label>
+            <label>Pressure rise <span class="unit">bar</span><input name="dp" type="number" min="0" step="5" value="50"></label>
+          </div>
+          <p class="note" id="assistDisp"></p>
+        </fieldset>
+        <fieldset>
+          <legend>Packaging</legend>
+          <div class="grid2">
+            <label>Rotor width <span class="unit">mm</span><input name="b" type="number" min="0.1" step="1" value="10"></label>
+            <label>Max outer Ø <span class="unit">mm</span><input name="ODmax" type="number" min="0" step="1" value="95"></label>
+            <label>Shaft / bore Ø <span class="unit">mm</span><input name="bore" type="number" min="0" step="1" value="22"></label>
+            <label>Tip clearance <span class="unit">mm</span><input name="clearance" type="number" min="0" step="0.01" value="0.02"></label>
+            <label>Min wall, outer <span class="unit">mm</span><input name="wallOut" type="number" min="0" step="0.5" value="5"></label>
+            <label>Min wall, inner <span class="unit">mm</span><input name="wallIn" type="number" min="0" step="0.5" value="5"></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Search range</legend>
+          <div class="grid2">
+            <label>Lobes from<input name="Nmin" type="number" min="3" max="20" step="1" value="5"></label>
+            <label>to<input name="Nmax" type="number" min="3" max="20" step="1" value="11"></label>
+            <label>Min r<sub>p</sub>/e<input name="kMin" type="number" min="1" step="0.1" value="1.5"></label>
+            <label>Valley margin <span class="unit">mm</span><input name="valleyMargin" type="number" min="0" step="0.05" value="0.1"></label>
+          </div>
+        </fieldset>
+        <button type="button" class="primary" id="assistRun">Search designs</button>
+        <fieldset class="re">
+          <legend>Reverse engineering (measured set)</legend>
+          <div class="grid2">
+            <label>Outer lobes N<input name="reN" type="number" min="3" step="1" value="9"></label>
+            <label>Lobe radius r<sub>p</sub> <span class="unit">mm</span><input name="reRp" type="number" min="0.1" step="0.01" value="10"></label>
+            <label>Inner tip Ø <span class="unit">mm</span><input name="reDt" type="number" step="0.01" value="73.404"></label>
+            <label>Inner root Ø <span class="unit">mm</span><input name="reDr" type="number" step="0.01" value="57.96"></label>
+            <label>Outer minor Ø <span class="unit">mm</span><input name="reDl" type="number" step="0.01" value="65.722"></label>
+            <label>Outer major Ø <span class="unit">mm</span><input name="reDv" type="number" step="0.01" value="81.166"></label>
+            <label>Width <span class="unit">mm</span><input name="reB" type="number" min="0" step="0.1" value="10"></label>
+            <label>Outer rotor OD <span class="unit">mm</span><input name="reOD" type="number" min="0" step="0.1" value="95"></label>
+          </div>
+          <p class="note" id="reStatus">Outer minor Ø = across the lobe tips; outer major Ø = valley circle.</p>
+          <button type="button" id="reApply">Derive &amp; apply</button>
+        </fieldset>
+      </form>
+      <div class="dlg-results">
+        <div id="assistStatus" class="note">Set the requirement and press “Search designs”.</div>
+        <div class="tbl-wrap"><table class="rtable" id="assistTable"></table></div>
+        <h3>Gamez-Montero best-practice estimate <small>(heuristic, for comparison)</small></h3>
+        <div class="tbl-wrap"><table class="rtable" id="gamezTable"></table></div>
+      </div>
+    </div>
+  </dialog>
+
+  <main class="layout">
+    <aside class="panel params">
+      <form id="params" autocomplete="off">
+        <fieldset>
+          <legend>Geometry</legend>
+          <label>Outer rotor lobes <i>N</i>
+            <input name="N" type="number" min="3" max="30" step="1" value="7"></label>
+          <label>Eccentricity <i>e</i> <span class="unit">mm</span>
+            <input name="e" type="number" min="0.01" step="0.1" value="3"></label>
+          <label>Lobe centre radius <i>R</i> <span class="unit">mm</span>
+            <input name="R" type="number" min="0.1" step="0.5" value="30"></label>
+          <label>Lobe radius <i>r<sub>p</sub></i> <span class="unit">mm</span>
+            <input name="rp" type="number" min="0.1" step="0.1" value="8"></label>
+          <label>Inner profile clearance <i>c</i> <span class="unit">mm</span>
+            <input name="c" type="number" min="0" step="0.01" value="0.03"></label>
+          <label class="with-check">Outer valley radius <i>R<sub>v</sub></i> <span class="unit">mm</span>
+            <span class="row">
+              <input name="Rv" type="number" min="0.1" step="0.1" value="28">
+              <span class="check"><input name="RvAuto" type="checkbox" checked> Auto</span>
+            </span></label>
+          <label>Auto valley margin <span class="unit">mm</span>
+            <input name="RvClear" type="number" min="0" step="0.1" value="0.5"></label>
+          <label>Outer rotor fillet radius <span class="unit">mm</span>
+            <input name="fillet" type="number" min="0" step="0.1" value="0"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Body</legend>
+          <label>Rotor width <i>b</i> <span class="unit">mm</span>
+            <input name="b" type="number" min="0.1" step="1" value="20"></label>
+          <label>Outer rotor OD <span class="unit">mm</span>
+            <input name="OD" type="number" min="1" step="1" value="80"></label>
+          <label>Inner rotor bore <span class="unit">mm</span>
+            <input name="bore" type="number" min="0" step="1" value="18"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Operating point</legend>
+          <label>Shaft speed <span class="unit">rpm</span>
+            <input name="rpm" type="number" min="0" step="50" value="1500"></label>
+          <label>Pressure rise Δp <span class="unit">bar</span>
+            <input name="dp" type="number" min="0" step="5" value="100"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Material</legend>
+          <div class="grid2">
+            <label>Inner E <span class="unit">GPa</span>
+              <input name="Ein" type="number" min="1" step="5" value="210"></label>
+            <label>Inner ν
+              <input name="nuIn" type="number" min="0" max="0.5" step="0.01" value="0.3"></label>
+            <label>Outer E <span class="unit">GPa</span>
+              <input name="Eout" type="number" min="1" step="5" value="210"></label>
+            <label>Outer ν
+              <input name="nuOut" type="number" min="0" max="0.5" step="0.01" value="0.3"></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Ports</legend>
+          <label class="inline"><input name="portsOn" type="checkbox" checked> Enable port model</label>
+          <label class="with-check">Outer port radius <span class="unit">mm</span>
+            <span class="row">
+              <input name="portRo" type="number" min="0" step="0.1" value="28">
+              <span class="check"><input name="portRoAuto" type="checkbox" checked> Auto</span>
+            </span></label>
+          <label class="with-check">Inner port radius (about O₁) <span class="unit">mm</span>
+            <span class="row">
+              <input name="portRi" type="number" min="0" step="0.1" value="19">
+              <span class="check"><input name="portRiAuto" type="checkbox" checked> Auto</span>
+            </span></label>
+          <p class="note">Timing offsets from the theoretical edges, positive in the direction of rotation.</p>
+          <div class="grid2">
+            <label>Suction start <span class="unit">°</span>
+              <input name="sucStart" type="number" step="0.5" value="0"></label>
+            <label>Suction end <span class="unit">°</span>
+              <input name="sucEnd" type="number" step="0.5" value="0"></label>
+            <label>Delivery start <span class="unit">°</span>
+              <input name="delStart" type="number" step="0.5" value="0"></label>
+            <label>Delivery end <span class="unit">°</span>
+              <input name="delEnd" type="number" step="0.5" value="0"></label>
+          </div>
+          <p class="note">Relief grooves: length into the land from each port edge (0 = none).</p>
+          <div class="grid2">
+            <label>Groove at suction start <span class="unit">°</span>
+              <input name="gSucStart" type="number" min="0" step="0.5" value="0"></label>
+            <label>Groove at suction end <span class="unit">°</span>
+              <input name="gSucEnd" type="number" min="0" step="0.5" value="0"></label>
+            <label>Groove at delivery start <span class="unit">°</span>
+              <input name="gDelStart" type="number" min="0" step="0.5" value="0"></label>
+            <label>Groove at delivery end <span class="unit">°</span>
+              <input name="gDelEnd" type="number" min="0" step="0.5" value="0"></label>
+          </div>
+          <label>Groove width <span class="unit">mm</span>
+            <input name="grooveW" type="number" min="0" step="0.1" value="1"></label>
+          <label class="inline"><input name="doubleFill" type="checkbox"> Double fill (ports on both faces)</label>
+        </fieldset>
+        <fieldset>
+          <legend>Fluid</legend>
+          <div class="grid2">
+            <label>Oil
+              <select name="oil">
+                <option value="custom">Custom (ν, ρ below)</option>
+                <option value="vg32">ISO VG 32</option>
+                <option value="vg46">ISO VG 46</option>
+                <option value="vg68">ISO VG 68</option>
+                <option value="sae5w30">SAE 5W-30</option>
+                <option value="mil23699">MIL-PRF-23699</option>
+                <option value="atf">ATF</option>
+              </select></label>
+            <label>Oil temperature <span class="unit">°C</span>
+              <input name="oilT" type="number" step="5" value="40"></label>
+            <label>Inlet pressure <span class="unit">bar abs</span>
+              <input name="pIn" type="number" min="0" step="0.1" value="1"></label>
+            <label>Cavitation pressure <span class="unit">bar abs</span>
+              <input name="pVap" type="number" min="0" step="0.05" value="0.2"></label>
+            <label>Density <span class="unit">kg/m³</span>
+              <input name="rho" type="number" min="1" step="10" value="860"></label>
+            <label>Bulk modulus <span class="unit">MPa</span>
+              <input name="bulk" type="number" min="1" step="100" value="1400"></label>
+            <label>Discharge coeff. <i>C<sub>d</sub></i>
+              <input name="Cd" type="number" min="0.1" max="1" step="0.05" value="0.7"></label>
+            <label>Kin. viscosity <span class="unit">cSt</span>
+              <input name="nu" type="number" min="0.1" step="1" value="30"></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Leakage</legend>
+          <label class="inline"><input name="leakOn" type="checkbox" checked> Model internal leakage</label>
+          <p class="note">Tip/flank gaps follow from the inner profile clearance <i>c</i>. Axial clearance is the total over both faces.</p>
+          <div class="grid2">
+            <label>Axial clearance <span class="unit">mm</span>
+              <input name="axialClr" type="number" min="0" step="0.005" value="0.05"></label>
+            <label>Tip gap model
+              <select name="tipGapModel"><option value="backlash">Backlash contact</option><option value="uniform">Uniform c</option></select></label>
+          </div>
+          <label class="inline"><input name="shaftVent" type="checkbox" checked> Shaft bore vented to inlet</label>
+        </fieldset>
+        <fieldset>
+          <legend>Friction</legend>
+          <p class="note">Viscous losses (Totaro et al. 2025); full-film lubrication assumed.</p>
+          <div class="grid2">
+            <label>OD clearance (diam.) <span class="unit">mm</span>
+              <input name="odClr" type="number" min="0" step="0.01" value="0.15"></label>
+            <label>Shaft bearing length <span class="unit">mm</span>
+              <input name="jbLen" type="number" min="0" step="1" value="0"></label>
+            <label>Bearing clearance (diam.) <span class="unit">mm</span>
+              <input name="jbClr" type="number" min="0" step="0.005" value="0.04"></label>
+          </div>
+        </fieldset>
+        <div class="btn-row">
+          <button type="button" id="resetBtn" class="ghost">Defaults</button>
+          <button type="button" id="saveBtn" class="ghost">Save JSON</button>
+          <label class="ghost file-btn">Load JSON<input id="loadInput" type="file" accept=".json,application/json"></label>
+        </div>
+      </form>
+    </aside>
+
+    <section class="stage">
+      <div class="canvas-wrap">
+        <canvas id="view"></canvas>
+        <div class="legend">
+          <span><i class="sw suction"></i>Suction (expanding)</span>
+          <span><i class="sw discharge"></i>Delivery (shrinking)</span>
+          <span><i class="sw trapped"></i>Sealed</span>
+          <span><i class="sw contact"></i>Contact</span>
+        </div>
+        <div class="hint">Wheel: zoom · Drag: pan · Double-click: fit</div>
+      </div>
+      <div class="controls">
+        <button id="playBtn" type="button" class="primary" title="Play / pause">❚❚</button>
+        <label class="grow">Inner shaft angle <output id="angleOut">0°</output>
+          <input id="angle" type="range" min="0" max="360" step="0.5" value="0"></label>
+        <label>Speed <output id="speedOut">30°/s</output>
+          <input id="speed" type="range" min="2" max="180" step="1" value="30"></label>
+        <div class="toggles">
+          <label><input type="checkbox" id="optChambers" checked> Chambers</label>
+          <label><input type="checkbox" id="optPorts" checked> Ports</label>
+          <label><input type="checkbox" id="optContacts" checked> Contacts</label>
+          <label><input type="checkbox" id="optPitch"> Pitch circles</label>
+          <label><input type="checkbox" id="optTrochoid"> Trochoid</label>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel results">
+      <section>
+        <h2>Performance</h2>
+        <dl class="metrics" id="metrics"></dl>
+      </section>
+      <section>
+        <h2>Checks</h2>
+        <ul class="checks" id="checks"></ul>
+      </section>
+      <section>
+        <h2>Chamber area <small>mm² · housing angle</small></h2>
+        <canvas class="chart" id="areaChart"></canvas>
+        <div class="chart-legend" id="areaLegend"></div>
+      </section>
+      <section>
+        <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
+        <canvas class="chart" id="pressureChart"></canvas>
+      </section>
+      <section>
+        <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
+        <canvas class="chart" id="flowChart"></canvas>
+        <div class="chart-legend" id="flowLegend"></div>
+      </section>
+      <section>
+        <h2>Performance map <small>speed × pressure sweep</small></h2>
+        <form id="mapForm" class="params" autocomplete="off">
+          <div class="grid2">
+            <label>Speed from <span class="unit">rpm</span><input name="rpmMin" type="number" min="1" step="100" value="500"></label>
+            <label>to<input name="rpmMax" type="number" min="1" step="100" value="4000"></label>
+            <label>Δp from <span class="unit">bar</span><input name="dpMin" type="number" min="0" step="5" value="10"></label>
+            <label>to<input name="dpMax" type="number" min="0" step="5" value="100"></label>
+            <label>Speed points<input name="nRpm" type="number" min="2" max="12" step="1" value="6"></label>
+            <label>Pressure points<input name="nDp" type="number" min="1" max="6" step="1" value="4"></label>
+          </div>
+          <div class="btn-row">
+            <button type="button" class="primary" id="mapRun">Compute map</button>
+            <button type="button" id="mapCsv" disabled>CSV</button>
+            <select id="mapQty">
+              <option value="etaT">Overall efficiency</option>
+              <option value="etaV">Volumetric efficiency</option>
+              <option value="etaM">Mechanical efficiency</option>
+              <option value="flowLpm">Delivered flow</option>
+              <option value="torque">Shaft torque</option>
+              <option value="powerIn">Input power</option>
+            </select>
+            <button type="button" id="maxRun" title="Highest speed with peak chamber void ≤ 0.5 % at the current Δp and inlet pressure">Max speed</button>
+          </div>
+        </form>
+        <div class="note" id="mapStatus"></div>
+        <div class="note" id="maxStatus"></div>
+        <canvas class="chart" id="mapChart"></canvas>
+        <div class="chart-legend" id="mapLegend"></div>
+      </section>
+      <section>
+        <h2>Dimensions</h2>
+        <dl class="metrics small" id="dims"></dl>
+      </section>
+      <section>
+        <h2>Export</h2>
+        <div class="export">
+          <select id="exportScope">
+            <option value="assembly">Assembly</option>
+            <option value="inner">Inner rotor</option>
+            <option value="outer">Outer rotor</option>
+            <option value="ports">Port plate</option>
+          </select>
+          <button type="button" data-export="dxf">DXF</button>
+          <button type="button" data-export="svg">SVG</button>
+          <button type="button" data-export="csv">CSV</button>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="js/geometry.js"></script>
+  <script src="js/ports.js"></script>
+  <script src="js/backlash.js"></script>
+  <script src="js/leakage.js"></script>
+  <script src="js/contact.js"></script>
+  <script src="js/friction.js"></script>
+  <script src="js/perfmap.js"></script>
+  <script src="js/reverse.js"></script>
+  <script src="js/fluid.js"></script>
+  <script src="js/spectrum.js"></script>
+  <script src="js/assist.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/assist-ui.js"></script>
+  <script src="js/perfmap-ui.js"></script>
+</body>
+</html>

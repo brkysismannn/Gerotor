@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gerotor Validation</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    body { display: block; padding: 16px; height: auto; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .summary { color: var(--text-muted); margin-bottom: 14px; }
+    .summary b { color: var(--text); }
+    .wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; background: var(--panel); }
+    th, td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: top; }
+    th { color: var(--text-muted); font-weight: 600; }
+    td.num { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
+    tr.suite td { background: var(--bg); font-weight: 600; padding-top: 12px; }
+    .st { font-weight: 600; }
+    .pass { color: var(--ok); } .fail { color: var(--err); } .known { color: var(--warn); }
+    .note { color: var(--text-muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Gerotor Design Tool — validation report</h1>
+  <div class="summary" id="summary">Running…</div>
+  <div class="wrap"><table id="tbl"><thead><tr>
+    <th>Test</th><th>Reference</th><th>Tool</th><th>Error</th><th>Tolerance</th><th>Status</th><th>Note</th>
+  </tr></thead><tbody></tbody></table></div>
+
+  <script src="../js/geometry.js"></script>
+  <script src="../js/ports.js"></script>
+  <script src="../js/backlash.js"></script>
+  <script src="../js/leakage.js"></script>
+  <script src="../js/contact.js"></script>
+  <script src="../js/friction.js"></script>
+  <script src="../js/perfmap.js"></script>
+  <script src="../js/reverse.js"></script>
+  <script src="../js/fluid.js"></script>
+  <script src="../js/spectrum.js"></script>
+  <script src="../js/assist.js"></script>
+  <script src="../js/export.js"></script>
+  <script src="tests.js"></script>
+  <script>
+    (function () {
+      const fmt = x => x === null || x === undefined ? '' : (Math.abs(x) >= 100 ? x.toFixed(2) : Math.abs(x) >= 1 ? x.toFixed(4) : x.toPrecision(4));
+      setTimeout(() => {
+        const { results, ms } = window.Gerotor.tests.runAll();
+        window.testResults = results;
+        const count = s => results.filter(r => r.status === s).length;
+        document.getElementById('summary').innerHTML =
+          `<b class="pass">${count('pass')} pass</b> · <b class="fail">${count('fail')} fail</b> · ` +
+          `<b class="known">${count('known')} known open issues</b> · ${results.length} tests · ${(ms / 1000).toFixed(1)} s`;
+        const tb = document.querySelector('#tbl tbody');
+        let suite = '';
+        for (const r of results) {
+          if (r.suite !== suite) {
+            suite = r.suite;
+            tb.insertAdjacentHTML('beforeend', `<tr class="suite"><td colspan="7">${suite}</td></tr>`);
+          }
+          const err = r.err === null ? '' : fmt(r.err) + ' ' + r.unit;
+          const tol = r.tol === null ? '' : '≤ ' + r.tol + ' ' + r.unit;
+          tb.insertAdjacentHTML('beforeend', `<tr><td>${r.name}</td><td class="num">${fmt(r.ref)}</td><td class="num">${fmt(r.value)}</td>` +
+            `<td class="num">${err}</td><td class="num">${tol}</td><td class="st ${r.status}">${r.status}</td><td class="note">${r.note}</td></tr>`);
+        }
+      }, 50);
+    })();
+  </script>
+</body>
+</html>
