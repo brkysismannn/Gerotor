@@ -358,6 +358,17 @@
           <button type="button" data-export="csv">CSV</button>
         </div>
       </section>
+      <section>
+        <h2>OpenModelica <small>system model</small></h2>
+        <p class="note">Builds a Modelica package (gerotor, outlet volume, load restriction, tanks, speed source) from the
+          current design and the case table of the Charts range, then opens it in OMEdit (local server needed).</p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="omOpen">Open in OpenModelica</button>
+          <button type="button" id="omDownload">Download .mo</button>
+          <button type="button" id="omCases">Case table</button>
+        </div>
+        <div class="note" id="omStatus"></div>
+      </section>
     </aside>
   </main>
 
@@ -367,6 +378,14 @@
       <button type="button" id="chartsClose" aria-label="Close">✕</button>
     </div>
     <div class="chart-grid" id="chartGrid"></div>
+  </dialog>
+
+  <dialog id="casesDlg" class="charts-dlg">
+    <div class="dlg-head">
+      <h2>Case setup <small>parameters × cases (exported to OpenModelica)</small></h2>
+      <button type="button" id="casesClose" aria-label="Close">✕</button>
+    </div>
+    <div class="case-wrap"><table class="case-table" id="caseTable"></table></div>
   </dialog>
 
   <script src="js/geometry.js"></script>
@@ -383,9 +402,11 @@
   <script src="js/render.js"></script>
   <script src="js/charts.js"></script>
   <script src="js/xlsx.js"></script>
+  <script src="js/modelica.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
   <script src="js/assist-ui.js"></script>
   <script src="js/perfmap-ui.js"></script>
+  <script src="js/modelica-ui.js"></script>
 </body>
 </html>

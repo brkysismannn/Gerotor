@@ -54,6 +54,10 @@ No installation: open `index.html` in a browser.
   shaft, wall thicknesses, tip clearance) finds geometries that hit the displacement exactly; objectives:
   lowest flow ripple, smallest outer diameter or lowest Hertz contact stress. Uses the scaling law V = b·e²·g(N, λ, rp/e) with the exact
   chamber model, grid + pattern search, full re-verification; shows the Gamez-Montero heuristic for comparison.
+- **OpenModelica:** one click builds a Modelica package (gerotor component with the exact angle tables, outlet
+  volume, load restriction, tanks, speed source — a ready system model) plus the case table, and opens it in
+  OMEdit via the local server (`tools/serve.ps1`); or download the `.mo` / `cases.mos`. Cross-checked against the
+  browser model (delivered flow +0.3 %).
 - **Export:** DXF (R12, layered: OUTER_ROTOR, INNER_ROTOR, PORTS), SVG (mm), CSV point cloud; parameters can be saved/loaded as JSON.
 
 ## Parameters
@@ -123,7 +127,7 @@ docs/             literature notes
 ## Roadmap
 
 - Port edges following the lobe profile
-- OpenModelica port of the lumped model (FMU export for system simulation)
+- FMU export of the Modelica system model
 - Couette flow in gaps, face leakage over tooth lands
 - Multi-tooth load sharing with elastic deformation
 - STEP export

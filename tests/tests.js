@@ -887,6 +887,33 @@
     check(S, 'Oversized port fillet is rejected', G.analyse(d({ portFillet: 6 })).ports.checks.some(c => c.title === 'Port fillet'));
   }
 
+  // ------------------------------------------------------------ 22. OpenModelica export
+
+  function suiteModelica() {
+    const S = '22 · OpenModelica export';
+    const P = { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5, portsOn: true, leakOn: true };
+    const p = design(P), r = G.analyse(p);
+    const ex = G.modelica.exportModelica(p, r, { name: 'Test pump 1', rpmMin: 1000, rpmMax: 3000, nRpm: 3, dpMin: 20, dpMax: 100, nDp: 2 });
+    const mo = ex.files[ex.name + '.mo'];
+    check(S, `Package name sanitised to a Modelica identifier (${ex.name})`, /^[A-Za-z_][A-Za-z0-9_]*$/.test(ex.name));
+    check(S, 'Package contains connector, gerotor, volume, restriction, tank and the system example',
+      ['connector FluidPort', 'model Gerotor', 'model Volume', 'model Restriction', 'model Tank', 'model PumpSystem', `end ${ex.name};`].every(s => mo.includes(s)));
+    const tab = G.modelica.tables(p, r);
+    check(S, `Angle table: M + 1 rows (${tab.length}), θ from 0 to 2π`, tab.length === r.M + 1 && tab[0][0] === 0 && Math.abs(tab[r.M][0] - TAU) < 1e-9);
+    record(S, 'Table: chamber area column = analysis area (SI)', r.A[10] * 1e-6, tab[10][1], 1e-12);
+    const jg = r.ports.sim.Gtip.indexOf(Math.max(...r.ports.sim.Gtip));
+    record(S, 'Table: tip conductance column = network G_tip', r.ports.sim.Gtip[jg], tab[jg][5], 1e-12);
+    const i0 = mo.indexOf('table[:, 6] = [');
+    const rowsTxt = mo.slice(i0, mo.indexOf(']', i0 + 16)).split('\n').slice(1);
+    const rowRe = /^\s+[-0-9.e]+, [-0-9.e]+, [-0-9.e]+, [-0-9.e]+, [-0-9.e]+, [-0-9.e]+;?$/;
+    check(S, `All ${tab.length} table rows written as numbers`, rowsTxt.length === tab.length && rowsTxt.every(l => rowRe.test(l)));
+    const cs = G.modelica.cases(p, r, { rpmMin: 1000, rpmMax: 3000, nRpm: 3, dpMin: 20, dpMax: 100, nDp: 2 });
+    check(S, `Case table: speeds × pressures = ${cs.length} cases; .mos runs each`, cs.length === 6 && (ex.files['cases.mos'].match(/simulate\(/g) || []).length === 6);
+    const c1 = cs[1], q = r.cc * 1e-6 * c1.rpm / 60 * r.ports.portEfficiency;
+    record(S, 'Load restriction sized for the case Δp at the expected flow: Cd·A·√(2Δp/ρ) = Q', q, p.Cd * c1.A * Math.sqrt(2 * c1.dp * 1e5 / p.rho), 1e-9);
+    check(S, 'Case CSV: header + one row per case', ex.files['cases.csv'].trim().split('\n').length === cs.length + 1);
+  }
+
   // ------------------------------------------------------------ 6. export
 
   function suiteExport() {
@@ -905,7 +932,7 @@
   function runAll() {
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting]) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica]) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };

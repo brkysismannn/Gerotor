@@ -236,6 +236,12 @@ dialog.charts-dlg::backdrop { background: rgba(0, 0, 0, .45); }
 .chart-card h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
 .chart-card h3 small { font-weight: 400; color: var(--text-muted); }
 .chart-card .chart { height: 220px; }
+.case-wrap { overflow: auto; max-height: calc(94vh - 56px); padding: 8px 16px 16px; }
+.case-table { border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); white-space: nowrap; }
+.case-table th, .case-table td { border: 1px solid var(--border); padding: 3px 8px; text-align: right; }
+.case-table th { background: var(--panel); position: sticky; top: 0; }
+.case-table td:first-child, .case-table td:nth-child(2), .case-table th:first-child, .case-table th:nth-child(2) { text-align: left; }
+.case-table tr.hl td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; margin: 6px 0; font-size: 12.5px; }
 .checks label { display: flex; align-items: center; gap: 5px; margin: 0; }
 .dlg-head { display: flex; align-items: baseline; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }

@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **234 pass · 0 fail · 3 known** (237 tests, ~130 s).
+Last run: 2026-10-23 — **243 pass · 0 fail · 3 known** (246 tests, ~135 s).
 
 ## Change log of the numerical core
 
@@ -277,6 +277,33 @@ orifice, ripple varied 3–13 % with the sub-step count — so it was replaced.)
 | Filleted port: clipped opening of a covering chamber = outline area | < 0.1 % |
 | Two outer corners (r_f 1 mm, R_o 28.5 mm): removed area vs exact corner area (sector − quadrilateral − fillet sector) | 0.4585 vs 0.4539 mm² (0.005 mm², chord discretisation of the port arc) |
 | Oversized fillet rejected (sharp corners used, error shown) | ✓ |
+
+## 22. OpenModelica export (`js/modelica.js`, `tools/serve.ps1` → OMEdit)
+
+The "Open in OpenModelica" button writes a self-contained Modelica package (MSL 4.1) to
+`modelica/<name>/` and starts OMEdit: `Components.Gerotor` (N chambers, port orifices, tip/face/land
+leakage, shaft torque by the power balance), `Volume`, `Restriction`, `Tank`, and
+`Examples.PumpSystem` (constant-speed source → gerotor → outlet volume → load restriction → tank, as the
+GT-SUITE model GDS builds). Angle-dependent geometry (A, dA/dθ, A_s, A_d, G_tip) is embedded as periodic tables
+from the browser model. `cases.mos` runs the case table (Charts range: speeds × pressure rises, restriction
+sized for each Δp at the expected flow — GT "Case Setup"); `cases.csv` lists the case parameters.
+
+In-browser tests (suite 22): identifier sanitising, package contents, table = analysis data (area, G_tip),
+all table rows numeric, case count and `.mos` commands, restriction sizing law, case CSV.
+
+**Cross-check OpenModelica 1.26.3 vs browser network** (default design N 7, 1500 rpm, 100 bar, leakage on;
+`omc` simulation of `PumpSystem`, 6 revolutions, mean of the last 2; outlet volume 1 cm³):
+
+| Quantity | Browser (constant p_D) | OpenModelica (outlet volume + restriction) | Difference |
+|---|---|---|---|
+| Delivered flow | 21.05 L/min at Δp 100 bar | 21.11 L/min at mean Δp 100.8 bar | +0.3 % |
+| Shaft (pressure) torque | 25.74 N·m (×100.8/100 = 25.95) | 25.95 N·m | ≈ 0 |
+| Min chamber pressure | 0.846 bar | 0.847 bar | ≈ 0 |
+| `checkModel` | — | 114 equations / 114 variables, passed | — |
+
+Compile ≈ 19 s, simulation ≈ 2 s. Differences in the model: cavitation by a smooth bulk-modulus drop instead
+of a void volume; orifice √ regularised below 100 Pa; outlet pressure two-way coupled (the browser ripple
+estimate is one-way, §20).
 
 ## 6. Export
 
