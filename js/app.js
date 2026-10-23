@@ -404,7 +404,9 @@
   $('pdfBtn').addEventListener('click', () => {
     if (!params || !res || !res.A) return;
     if (!res.valid && !confirm('The design has failing checks. Export anyway?')) return;
-    G.exporters.download(`gerotor_N${params.N}_drawing.pdf`, G.drawing.technicalDrawing(params, res), 'application/pdf');
+    const scope = $('exportScope').value;
+    if (scope === 'ports' && !(res.ports && res.ports.suction)) { alert('Enable the port model to draw the port plate.'); return; }
+    G.exporters.download(`gerotor_N${params.N}_${scope}_drawing.pdf`, G.drawing.drawingFor(params, res, scope), 'application/pdf');
   });
   $('stepBtn').addEventListener('click', () => {
     if (!params || !res || !res.A) return;

@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **281 pass · 0 fail · 3 known** (284 tests, ~140 s).
+Last run: 2026-10-23 — **286 pass · 0 fail · 3 known** (289 tests, ~140 s).
 
 ## Change log of the numerical core
 
@@ -339,7 +339,14 @@ estimate is one-way, §20).
 
 ## 23. PDF technical drawing and STEP AP242 (`js/drawing.js`, `js/step.js`)
 
-**PDF drawing** (A3 landscape, vector, Helvetica): outer rotor and inner rotor front views with diameter
+**PDF drawings per export scope:** *outer rotor* (OD, valley Ø, lobe-tip Ø, lobe radius and lobe-centre circle,
+fillets, side view, data table), *inner rotor* (tip, root, bore Ø, pitch circle, trochoid data, max tool Ø),
+*port plate* (filleted kidney ports with grooves, O2 / O1 and e, edge angles S1, S2, D1, D2 as chain lines,
+outer port radius about O2, inner port radius about O1, port data table: angles, radii, corner radii, areas,
+depth, arrangement, grooves, timing offsets) and *assembly* (overview sheet below). Tests: each sheet carries
+its own title, drawing number and key values (e.g. the four port edge angles); four different sheets.
+
+**Assembly overview** (A3 landscape, vector, Helvetica): outer rotor and inner rotor front views with diameter
 dimensions (OD, valley Ø, lobe-tip Ø; tip Ø, root Ø, bore Ø), side views with the width, assembly view with the
 eccentricity, profile-data table (N, e, R, r_p, c, R_v, b, λ, displacement, max tool Ø), notes and title block;
 largest standard scale with the outer rotor ≤ 115 mm. Checked: PDF header/trailer, every xref offset points to

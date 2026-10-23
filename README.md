@@ -60,8 +60,9 @@ No installation: open `index.html` in a browser.
   (chamber volumes, tip gaps, axial gaps, port volumes, outlet restriction, friction, shaft inertia, gear, speed
   source) with oil viscosity/density vs temperature (ASTM D341). Cross-checked against the browser model
   (delivered flow −0.02 … +0.3 %, torque ≈ 0).
-- **Technical drawing (PDF):** A3 sheet with rotor views, diameter dimensions, side views, assembly with
-  eccentricity, profile-data table, notes and title block.
+- **Technical drawings (PDF, A3):** one sheet per export scope — outer rotor, inner rotor, port plate (port
+  edge angles, port radii about O2 / O1, corner radii, grooves, port data) and the assembly overview; diameter
+  dimensions, side views, data tables, notes and title block.
 - **STEP AP242:** rotors (or the assembly) as exact B-rep solids — true circular arcs / cylinders for the outer
   rotor, OD and bore, cubic B-spline extrusions (≤ 2 µm) for the inner profile; imported as valid closed solids
   in FreeCAD / OpenCascade (`tools/check_step.py`). A faceted mode is available as well.

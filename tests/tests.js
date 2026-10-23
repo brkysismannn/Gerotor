@@ -956,6 +956,18 @@
     check(S, `PDF: dimension and table texts present (${need.length})`, need.every(t => pdf.includes('(' + G.drawing.pdfString(t)) || pdf.includes(G.drawing.pdfString(t))));
     check(S, 'PDF: standard scale chosen so that the outer rotor fits the view (1:1 for OD 80)', pdf.includes('(1:1)'));
 
+    // One sheet per export scope.
+    const pp = design(Object.assign({}, P, { portsOn: true, portFillet: 1, gDelStart: 4, grooveW: 1 })), rp = G.analyse(pp);
+    const sheet = sc => new TextDecoder('latin1').decode(G.drawing.drawingFor(pp, rp, sc, { date: '2026-01-01' }));
+    const sO = sheet('outer'), sI = sheet('inner'), sP = sheet('ports'), sA = sheet('assembly');
+    const has = (txt, t) => txt.includes(G.drawing.pdfString(t));
+    check(S, 'Outer-rotor sheet: title, OD, valley Ø, lobe radius, data table, own drawing number', has(sO, 'OUTER ROTOR N7') && has(sO, 'Ø80') && has(sO, 'Ø57') && has(sO, 'R8 (7x)') && has(sO, 'OUTER ROTOR DATA') && has(sO, '-OR'));
+    check(S, 'Inner-rotor sheet: title, tip / root / bore Ø, pitch circle, tool Ø, own drawing number', has(sI, 'INNER ROTOR N6') && has(sI, 'Ø' + (2 * pp.innerTip).toFixed(2)) && has(sI, 'Ø18') && has(sI, 'Pitch circle') && has(sI, 'Max tool') && has(sI, '-IR'));
+    const angs = [rp.ports.suction.a0, rp.ports.suction.a1, rp.ports.delivery.a0, rp.ports.delivery.a1].map(a => (Math.round(((a % TAU) + TAU) % TAU * 18000 / Math.PI) / 100).toFixed(2) + '°');
+    check(S, `Port-plate sheet: the four edge angles (${angs.join(', ')}), port radii, corner radii, grooves`, angs.every(a => has(sP, a)) && has(sP, 'R' + (+pp.portRo.toFixed(3))) && has(sP, 'PORT DATA') && has(sP, 'Corner radii') && has(sP, '1x 1 wide'));
+    check(S, 'Assembly sheet is the overview with all views', has(sA, 'ASSEMBLY') && has(sA, 'OUTER ROTOR') && has(sA, 'INNER ROTOR'));
+    check(S, 'Four different sheets', new Set([sO, sI, sP, sA].map(t => t.length + t.slice(-300))).size === 4);
+
     // STEP exact mode (default): arcs → circles / cylinders, inner profile → cubic B-splines / extrusions.
     for (const scope of ['outer', 'inner', 'assembly']) {
       const txt = G.step.stepFile(p, r, { scope, date: '2026-01-01T00:00:00' });

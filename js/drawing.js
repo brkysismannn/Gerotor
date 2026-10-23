@@ -65,9 +65,9 @@
 
   // WinAnsi string with PDF escapes (Ø ° ± µ · × are in WinAnsi; others replaced).
   function pdfString(s) {
-    const map = { 'λ': 'lambda', 'η': 'eta', 'Δ': 'd', 'ν': 'nu', 'ρ': 'rho', '−': '-', '–': '-', '—': '-', '…': '...', '≈': '~', '²': '²', '³': '³' };
+    const map = { 'λ': 'lambda', 'η': 'eta', 'Δ': 'd', 'ν': 'nu', 'ρ': 'rho', '−': '-', '–': '-', '—': '-', '…': '...', '≈': '~', '→': '->', '₁': '1', '₂': '2' };
     let out = '';
-    for (const ch of s.replace(/[ληΔνρ−–—…≈]/g, c => map[c])) {
+    for (const ch of s.replace(/[ληΔνρ−–—…≈→₁₂]/g, c => map[c])) {
       const code = ch.charCodeAt(0);
       if (ch === '(' || ch === ')' || ch === '\\') out += '\\' + ch;
       else if (code < 32) continue;
@@ -247,5 +247,198 @@
     return pdfBytes(pg.ops, { title: meta.title || `Gerotor N${p.N}` });
   }
 
-  G.drawing = { technicalDrawing, pdfBytes, pdfString, Page, SHEET, scaleLabel };
+  // ------------------------------------------------------------------ shared sheet elements
+
+  function table(pg, x, yTop, title, rows, cw) {
+    const rh = 5.2, w = cw[0] + cw[1];
+    pg.width(0.35).rect(x, yTop - rows.length * rh, w, rows.length * rh + rh);
+    pg.text(x + 2, yTop + 1.4, 3.4, title, 'left', true);
+    pg.width(0.18).line(x, yTop, x + w, yTop);
+    rows.forEach((r, i) => {
+      const y = yTop - (i + 1) * rh;
+      pg.line(x, y, x + w, y);
+      pg.text(x + 2, y + 1.5, 3, r[0]).text(x + w - 2, y + 1.5, 3, r[1], 'right');
+    });
+    pg.line(x + cw[0], yTop, x + cw[0], yTop - rows.length * rh);
+    return yTop - rows.length * rh;
+  }
+
+  function notesBlock(pg, x, y, lines) {
+    pg.text(x, y, 3.4, 'NOTES', 'left', true);
+    lines.forEach((t, i) => pg.text(x, y - 5 * (i + 1), 3, `${i + 1}. ${t}`));
+  }
+
+  function titleBlock(pg, p, meta, S, title, sub, number) {
+    const W = SHEET.w, bx = W - 10 - 170, by = 10, date = meta.date || new Date().toISOString().slice(0, 10);
+    pg.width(0.5).rect(bx, by, 170, 40);
+    pg.width(0.25).line(bx, by + 20, bx + 170, by + 20).line(bx + 100, by, bx + 100, by + 40).line(bx + 100, by + 10, bx + 170, by + 10).line(bx + 100, by + 30, bx + 170, by + 30).line(bx + 135, by, bx + 135, by + 20);
+    pg.text(bx + 3, by + 32, 5, title, 'left', true);
+    pg.text(bx + 3, by + 24, 3.2, sub);
+    pg.text(bx + 3, by + 13, 3, 'Gerotor Design Tool');
+    pg.text(bx + 3, by + 7, 3, `Drawing no. ${number}`);
+    pg.text(bx + 103, by + 33, 2.6, 'Scale').text(bx + 103, by + 22.5, 2.6, 'Date').text(bx + 103, by + 13, 2.6, 'Units').text(bx + 138, by + 13, 2.6, 'Sheet').text(bx + 103, by + 3, 2.6, 'Format').text(bx + 138, by + 3, 2.6, 'Projection');
+    pg.text(bx + 120, by + 33, 4, scaleLabel(S), 'left', true).text(bx + 115, by + 22.5, 3.4, date).text(bx + 115, by + 13, 3.4, 'mm').text(bx + 150, by + 13, 3.4, '1 / 1').text(bx + 115, by + 3, 3.4, 'A3').text(bx + 155, by + 3, 3.4, 'ISO E');
+  }
+
+  const drawingNo = (p, suffix) => `GRT-${p.N}-${Math.round(p.e * 1000)}-${suffix}`;
+  const deg = a => (a * 180 / Math.PI);
+  const fdeg = a => (Math.round(deg(a) * 100) / 100).toFixed(2) + '°';
+
+  // Side view of a rotor (rectangle width b × height h) with the width dimension.
+  function sideView(pg, x, cy, h, b, S, borePairs) {
+    pg.width(0.5).rect(x, cy - h / 2, b * S, h);
+    (borePairs || []).forEach(r => pg.width(0.25).dash(2, 1).line(x, cy + r, x + b * S, cy + r).line(x, cy - r, x + b * S, cy - r).dash(0));
+    pg.width(0.13).dash(6, 1.5).line(x - 4, cy, x + b * S + 4, cy).dash(0);
+    linDim(pg, [x, cy + h / 2], [x + b * S, cy + h / 2], 8, f2(b));
+  }
+
+  // ------------------------------------------------------------------ single-part sheets
+
+  /*
+   * scope 'outer' | 'inner' | 'ports': one part per A3 sheet, main view at the largest standard scale
+   * fitting 175 mm, side view, data table, notes, title block.
+   */
+  function partDrawing(p, res, scope, meta) {
+    meta = meta || {};
+    const pg = Page(), W = SHEET.w, H = SHEET.h;
+    pg.width(0.7).rect(20, 10, W - 30, H - 20);
+    const size = scope === 'inner' ? 2 * p.innerTip : p.OD;
+    const S = SCALES.find(s => size * s <= 175) || SCALES[SCALES.length - 1];
+    const M = [125, H - 10 - 22 - size * S / 2];             // main view centre
+    const sc = (pts, dx) => pts.map(q => [M[0] + (q[0] + (dx || 0)) * S, M[1] + q[1] * S]);
+    const tool = G.innerToolDiameter(p).diameter;
+
+    if (scope === 'outer') {
+      const outer = G.outerProfile(p, 120, 60);
+      pg.width(0.5).circle(M[0], M[1], p.OD / 2 * S).poly(sc(outer), true);
+      centreCross(pg, M[0], M[1], p.OD / 2 * S + 6);
+      pg.width(0.13).dash(4, 1.2).circle(M[0], M[1], p.R * S).dash(0);
+      diaDim(pg, M[0], M[1], p.OD / 2 * S, Math.PI / 4, 'Ø' + f2(p.OD));
+      diaDim(pg, M[0], M[1], p.Rv * S, 3 * Math.PI / 4 + 0.15, 'Ø' + f2(2 * p.Rv), { ext: 30 });
+      diaDim(pg, M[0], M[1], p.outerTip * S, -Math.PI / 2 - Math.PI / p.N, 'Ø' + f2(2 * p.outerTip), { ext: 40 });
+      // Lobe radius and lobe-centre circle callouts on lobe 0.
+      const C0 = [M[0] + p.R * S, M[1]];
+      pg.width(0.18).line(C0[0], C0[1], C0[0] - p.rp * S * Math.cos(0.5), C0[1] + p.rp * S * Math.sin(0.5)).arrow(C0[0] - p.rp * S * Math.cos(0.5), C0[1] + p.rp * S * Math.sin(0.5), Math.PI - 0.5, 2.6);
+      pg.text(C0[0] + 2, C0[1] + 3, 3.2, `R${f2(p.rp)} (${p.N}x)`);
+      pg.text(M[0] - p.R * S * 0.7, M[1] - p.R * S * 0.75, 3, `Ø${f2(2 * p.R)} lobe centres`, 'center');
+      if (p.fillet > 0) pg.text(M[0], M[1] + p.OD / 2 * S + 12, 3.2, `Fillets R${f2(p.fillet)} between lobes and valley (${2 * p.N}x)`, 'center');
+      pg.text(M[0], M[1] - p.OD / 2 * S - 12, 4, `OUTER ROTOR  ${p.N} lobes  (scale ${scaleLabel(S)})`, 'center', true);
+      sideView(pg, M[0] + size * S / 2 + 22, M[1], p.OD * S, p.b, S);
+      const end = table(pg, 300, H - 30, 'OUTER ROTOR DATA', [
+        ['Number of lobes N', String(p.N)], ['Outside diameter', 'Ø' + f2(p.OD)], ['Lobe centre circle', 'Ø' + f2(2 * p.R)],
+        ['Lobe radius rp', f2(p.rp)], ['Lobe tip diameter', 'Ø' + f2(2 * p.outerTip)], ['Valley (root) diameter', 'Ø' + f2(2 * p.Rv)],
+        ['Fillet radius', p.fillet > 0 ? f2(p.fillet) : 'none'], ['Width b', f2(p.b)], ['Mating inner rotor e', f2(p.e)],
+      ], [62, 46]);
+      notesBlock(pg, 30, 62, [
+        'Profile: N circular lobes R' + f2(p.rp) + ' on Ø' + f2(2 * p.R) + ', valley arc Ø' + f2(2 * p.Rv) + '; exact (STEP / DXF).',
+        'General tolerances ISO 2768-mK; profile, OD and width tolerances per application.',
+        `Material: ${meta.material || 'sintered steel / steel'}.`, 'Break all sharp edges 0.2 x 45°.']);
+      titleBlock(pg, p, meta, S, `OUTER ROTOR N${p.N}`, `Gerotor set N${p.N}/${p.N - 1}, e ${f2(p.e)}, b ${f2(p.b)} mm`, drawingNo(p, 'OR'));
+      void end;
+    } else if (scope === 'inner') {
+      const inner = G.innerProfile(p, Math.max(1440, (p.N - 1) * 300), p.rp + p.c);
+      pg.width(0.5).poly(sc(inner), true);
+      if (p.bore > 0) pg.circle(M[0], M[1], p.bore / 2 * S);
+      centreCross(pg, M[0], M[1], p.innerTip * S + 6);
+      pg.width(0.13).dash(4, 1.2).circle(M[0], M[1], (p.N - 1) * p.e * S).dash(0);
+      diaDim(pg, M[0], M[1], p.innerTip * S, Math.PI / 4 - 0.1, 'Ø' + f2(2 * p.innerTip));
+      diaDim(pg, M[0], M[1], p.innerRoot * S, 3 * Math.PI / 4, 'Ø' + f2(2 * p.innerRoot), { ext: 26 });
+      if (p.bore > 0) diaDim(pg, M[0], M[1], p.bore / 2 * S, -Math.PI / 4, 'Ø' + f2(p.bore), { ext: p.innerTip * S - p.bore / 2 * S + 10 });
+      pg.text(M[0] - p.innerTip * S * 0.55, M[1] - p.innerTip * S * 0.95, 3, `Ø${f2(2 * (p.N - 1) * p.e)} pitch circle`, 'center');
+      pg.text(M[0], M[1] - p.innerTip * S - 14, 4, `INNER ROTOR  ${p.N - 1} teeth  (scale ${scaleLabel(S)})`, 'center', true);
+      sideView(pg, M[0] + size * S / 2 + 22, M[1], 2 * p.innerTip * S, p.b, S, p.bore > 0 ? [p.bore / 2 * S] : []);
+      table(pg, 300, H - 30, 'INNER ROTOR DATA', [
+        ['Number of teeth', String(p.N - 1)], ['Tip diameter', 'Ø' + f2(2 * p.innerTip)], ['Root diameter', 'Ø' + f2(2 * p.innerRoot)],
+        ['Bore', p.bore > 0 ? 'Ø' + f2(p.bore) : '-'], ['Width b', f2(p.b)], ['Generating trochoid R', f2(p.R)],
+        ['Eccentricity e', f2(p.e)], ['Offset rp + c', f2(p.rp + p.c)], ['Pitch circle (N-1)e', 'Ø' + f2(2 * (p.N - 1) * p.e)],
+        ['Max tool Ø (concave root)', Number.isFinite(tool) ? f2(tool) : 'no limit'],
+      ], [62, 46]);
+      notesBlock(pg, 30, 62, [
+        `Profile: epitrochoid R ${f2(p.R)}, e ${f2(p.e)}, N ${p.N}, offset inward by rp + c = ${f2(p.rp + p.c)}; coordinates in DXF / CSV, exact B-spline in STEP.`,
+        'Profile clearance c = ' + f2(p.c) + ' mm is included in the offset.',
+        'General tolerances ISO 2768-mK; profile, bore and width tolerances per application.',
+        `Material: ${meta.material || 'sintered steel / steel'}. Break all sharp edges 0.2 x 45°.`]);
+      titleBlock(pg, p, meta, S, `INNER ROTOR N${p.N - 1}`, `Gerotor set N${p.N}/${p.N - 1}, e ${f2(p.e)}, b ${f2(p.b)} mm`, drawingNo(p, 'IR'));
+    } else {
+      portSheet(pg, p, res, M, S, meta);
+    }
+    return pdfBytes(pg.ops, { title: meta.title || `Gerotor N${p.N} ${scope}` });
+  }
+
+  /*
+   * Port plate sheet: kidney ports (filleted, with grooves) in the housing frame, outer rotor centre O2
+   * and inner rotor centre O1, port edge angles (chain lines from O2), outer port radius about O2, inner
+   * port radius about O1, rotor outline for reference, data table.
+   */
+  function portSheet(pg, p, res, M, S, meta) {
+    const H = SHEET.h, pr = res.ports;
+    if (!pr || !pr.suction) {
+      pg.text(125, H / 2, 5, 'Port model off: enable the ports to draw the port plate.', 'center', true);
+      titleBlock(pg, p, meta, S, 'PORT PLATE', 'no ports', drawingNo(p, 'PP'));
+      return;
+    }
+    const sc = pts => pts.map(q => [M[0] + q[0] * S, M[1] + q[1] * S]);
+    // Reference: rotor bore / OD (thin chain), rotor envelope.
+    pg.width(0.13).dash(6, 1.5).circle(M[0], M[1], p.OD / 2 * S).dash(0);
+    // Ports.
+    pg.width(0.5).poly(sc(pr.suction.outline), true).poly(sc(pr.delivery.outline), true);
+    for (const g of [...(pr.suction.grooves || []), ...(pr.delivery.grooves || [])]) pg.width(0.35).poly(sc(g.outline), true);
+    // Centres O2 (origin) and O1 (e, 0), line of centres.
+    centreCross(pg, M[0], M[1], p.OD / 2 * S + 6);
+    const O1 = [M[0] + p.e * S, M[1]];
+    pg.width(0.13).dash(6, 1.5).line(O1[0], O1[1] - 6, O1[0], O1[1] + 6).dash(0);
+    pg.text(M[0] - 2, M[1] + 2, 3, 'O2', 'right').text(O1[0] + 2, O1[1] + 2, 3, 'O1');
+    pg.width(0.13).dash(6, 1.5).line(O1[0], O1[1], O1[0], M[1] + p.OD / 2 * S + 2).dash(0);
+    linDim(pg, [M[0], M[1] + p.OD / 2 * S + 2], [O1[0], M[1] + p.OD / 2 * S + 2], 6, 'e = ' + f2(p.e));
+    // Edge angles: chain lines from O2 to beyond the outer radius, labelled.
+    const edges = [['S1', pr.suction.a0], ['S2', pr.suction.a1], ['D1', pr.delivery.a0], ['D2', pr.delivery.a1]];
+    const rl = (p.portRo + 8) * S;
+    for (const [lab, a] of edges) {
+      const ex = M[0] + rl * Math.cos(a), ey = M[1] + rl * Math.sin(a);
+      pg.width(0.13).dash(6, 1.5).line(M[0], M[1], ex, ey).dash(0);
+      const right = Math.cos(a) >= 0;
+      pg.text(ex + (right ? 1.5 : -1.5), ey + (Math.sin(a) >= 0 ? 1 : -3.5), 3.2, `${lab} ${fdeg(((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI))}`, right ? 'left' : 'right');
+    }
+    // Outer port radius about O2 (dimension inside the suction port), inner port radius about O1.
+    const am = 0.5 * (pr.suction.a0 + pr.suction.a1);
+    pg.width(0.18).line(M[0], M[1], M[0] + p.portRo * S * Math.cos(am), M[1] + p.portRo * S * Math.sin(am)).arrow(M[0] + p.portRo * S * Math.cos(am), M[1] + p.portRo * S * Math.sin(am), am, 2.6);
+    pg.text(M[0] + p.portRo * S * 0.55 * Math.cos(am) + 2, M[1] + p.portRo * S * 0.55 * Math.sin(am), 3.2, `R${f2(p.portRo)} (O2)`);
+    if (p.portRi > 0) {
+      const ad = 0.5 * (pr.delivery.a0 + pr.delivery.a1), u = [Math.cos(ad), Math.sin(ad)];
+      // Point on the inner arc about O1 in direction ad from O1.
+      const T = [O1[0] + p.portRi * S * u[0], O1[1] + p.portRi * S * u[1]];
+      pg.width(0.18).line(O1[0], O1[1], T[0], T[1]).arrow(T[0], T[1], ad, 2.6);
+      pg.text(O1[0] + p.portRi * S * 0.5 * u[0] + 2, O1[1] + p.portRi * S * 0.5 * u[1] - 3, 3.2, `R${f2(p.portRi)} (O1)`);
+    }
+    pg.text(M[0], M[1] - p.OD / 2 * S - 10, 4, `PORT PLATE  (scale ${scaleLabel(S)})`, 'center', true);
+    pg.text(M[0], M[1] - p.OD / 2 * S - 15, 3, 'Suction (inlet) port upper, delivery (outlet) port lower; rotation CCW; chain circle = rotor OD', 'center');
+
+    const depth = p.b * (p.fillD > 1 || p.fillS > 1 ? 0.5 : 1);
+    const ports = [p.dblIn ? 'in 2 faces' : 'in 1 face', p.dblOut ? 'out 2 faces' : 'out 1 face', p.shadow ? 'shadow' : ''].filter(Boolean).join(', ');
+    const g = (pr.suction.grooves || []).concat(pr.delivery.grooves || []);
+    table(pg, 300, H - 30, 'PORT DATA', [
+      ['Suction start S1', fdeg(pr.suction.a0)], ['Suction end S2', fdeg(pr.suction.a1)],
+      ['Delivery start D1', fdeg(pr.delivery.a0)], ['Delivery end D2', fdeg(pr.delivery.a1)],
+      ['Outer port radius (O2)', f2(p.portRo)], ['Inner port radius (O1)', p.portRi > 0 ? f2(p.portRi) : '-'],
+      ['Corner radii', p.portFillet > 0 ? f2(p.portFillet) : 'sharp'],
+      ['Suction / delivery area', `${pr.suction.area.toFixed(1)} / ${pr.delivery.area.toFixed(1)} mm²`],
+      ['Port depth (as GDS)', f2(depth)], ['Arrangement', ports],
+      ['Grooves', g.length ? `${g.length}x ${f2(p.grooveW)} wide${p.grooveD > 0 ? ', ' + f2(p.grooveD) + ' deep' : ''}` : 'none'],
+      ['Timing offsets S/S/D/D', [p.sucStart, p.sucEnd, p.delStart, p.delEnd].map(v => (v || 0) + '°').join(' ')],
+    ], [58, 50]);
+    notesBlock(pg, 30, 62, [
+      'Angles from the line of centres O2 → O1 (3 o\'clock), positive CCW = direction of rotation.',
+      'Port edges are radial lines from O2; outer arc about O2, inner arc about O1 (inner rotor root).',
+      'Theoretical edges from the chamber extent at min / max volume plus the timing offsets.',
+      'General tolerances ISO 2768-mK.']);
+    titleBlock(pg, p, meta, S, 'PORT PLATE', `Gerotor set N${p.N}/${p.N - 1}, e ${f2(p.e)}; displacement ${res.cc.toFixed(3)} cm³/rev`, drawingNo(p, 'PP'));
+  }
+
+  // Drawing for an export scope: 'assembly' (overview sheet), 'outer', 'inner', 'ports'.
+  function drawingFor(p, res, scope, meta) {
+    return scope === 'outer' || scope === 'inner' || scope === 'ports'
+      ? partDrawing(p, res, scope, meta) : technicalDrawing(p, res, meta);
+  }
+
+  G.drawing = { technicalDrawing, partDrawing, drawingFor, pdfBytes, pdfString, Page, SHEET, scaleLabel };
 })(window.Gerotor);
