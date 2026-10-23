@@ -150,12 +150,12 @@
               <input name="portRo" type="number" min="0" step="0.1" value="28">
               <span class="check"><input name="portRoAuto" type="checkbox" checked> Auto</span>
             </span></label>
-          <label class="with-check">Inner port radius (about O₁) <span class="unit">mm</span>
+          <label class="with-check">Inner port radius (O₁) <span class="unit">mm</span>
             <span class="row">
               <input name="portRi" type="number" min="0" step="0.1" value="19">
               <span class="check"><input name="portRiAuto" type="checkbox" checked> Auto</span>
             </span></label>
-          <p class="note">Timing offsets from the theoretical edges, positive in the direction of rotation.</p>
+          <p class="note">Timing offsets from the theoretical edges (+ = direction of rotation).</p>
           <div class="grid2">
             <label>Suction start <span class="unit">°</span>
               <input name="sucStart" type="number" step="0.5" value="0"></label>
@@ -166,28 +166,28 @@
             <label>Delivery end <span class="unit">°</span>
               <input name="delEnd" type="number" step="0.5" value="0"></label>
           </div>
-          <p class="note">Relief grooves: length into the land from each port edge (0 = none).</p>
+          <p class="note">Relief grooves: length into the land at each port edge (0 = none).</p>
           <div class="grid2">
-            <label>Groove at suction start <span class="unit">°</span>
+            <label>Suction start <span class="unit">°</span>
               <input name="gSucStart" type="number" min="0" step="0.5" value="0"></label>
-            <label>Groove at suction end <span class="unit">°</span>
+            <label>Suction end <span class="unit">°</span>
               <input name="gSucEnd" type="number" min="0" step="0.5" value="0"></label>
-            <label>Groove at delivery start <span class="unit">°</span>
+            <label>Delivery start <span class="unit">°</span>
               <input name="gDelStart" type="number" min="0" step="0.5" value="0"></label>
-            <label>Groove at delivery end <span class="unit">°</span>
+            <label>Delivery end <span class="unit">°</span>
               <input name="gDelEnd" type="number" min="0" step="0.5" value="0"></label>
           </div>
           <div class="grid2">
             <label>Groove width <span class="unit">mm</span>
               <input name="grooveW" type="number" min="0" step="0.1" value="1"></label>
-            <label>Groove depth (0 = full) <span class="unit">mm</span>
+            <label title="0 = as deep as the port">Groove depth <span class="unit">mm</span>
               <input name="grooveD" type="number" min="0" step="0.05" value="0"></label>
           </div>
-          <label>Port fillet radii (corners) <span class="unit">mm</span>
+          <label>Port corner radius <span class="unit">mm</span>
             <input name="portFillet" type="number" min="0" step="0.1" value="0"></label>
-          <label>Outlet volume (pressure ripple) <span class="unit">cm³</span>
+          <label title="Volume behind the outlet port, used for the outlet pressure ripple (0 = restriction only)">Outlet volume <span class="unit">cm³</span>
             <input name="outletVol" type="number" min="0" step="1" value="0"></label>
-          <p class="note">Porting type (as GDS). Without a double-sided outlet or shadow ports the rotors are pressed to the housing floor.</p>
+          <p class="note">Porting type. Without a double-sided outlet or shadow ports the rotors are pressed to the floor.</p>
           <label class="inline"><input name="dblIn" type="checkbox"> Double-sided inlet port</label>
           <label class="inline"><input name="dblOut" type="checkbox"> Double-sided outlet port</label>
           <label class="inline"><input name="shadow" type="checkbox" checked> Shadow ports</label>
