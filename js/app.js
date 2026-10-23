@@ -401,6 +401,18 @@
     G.exporters.download(name, G.exporters[kind](params, scope, res), types[kind]);
   }));
 
+  $('pdfBtn').addEventListener('click', () => {
+    if (!params || !res || !res.A) return;
+    if (!res.valid && !confirm('The design has failing checks. Export anyway?')) return;
+    G.exporters.download(`gerotor_N${params.N}_drawing.pdf`, G.drawing.technicalDrawing(params, res), 'application/pdf');
+  });
+  $('stepBtn').addEventListener('click', () => {
+    if (!params || !res || !res.A) return;
+    if (!res.valid && !confirm('The design has failing checks. Export anyway?')) return;
+    const scope = $('exportScope').value === 'ports' ? 'assembly' : $('exportScope').value;
+    G.exporters.download(`gerotor_N${params.N}_${scope}.step`, G.step.stepFile(params, res, { scope }), 'model/step');
+  });
+
   $('themeToggle').addEventListener('click', () => {
     const root = document.documentElement;
     const dark = root.dataset.theme

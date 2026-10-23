@@ -60,6 +60,10 @@ No installation: open `index.html` in a browser.
   (chamber volumes, tip gaps, axial gaps, port volumes, outlet restriction, friction, shaft inertia, gear, speed
   source) with oil viscosity/density vs temperature (ASTM D341). Cross-checked against the browser model
   (delivered flow −0.02 … +0.3 %, torque ≈ 0).
+- **Technical drawing (PDF):** A3 sheet with rotor views, diameter dimensions, side views, assembly with
+  eccentricity, profile-data table, notes and title block.
+- **STEP AP242:** rotors (or the assembly) as B-rep solids (faceted side faces), checked for closed manifold
+  shells, Euler–Poincaré and volume.
 - **Export:** DXF (R12, layered: OUTER_ROTOR, INNER_ROTOR, PORTS), SVG (mm), CSV point cloud; parameters can be saved/loaded as JSON.
 
 ## Parameters

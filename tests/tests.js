@@ -936,6 +936,60 @@
     check(S, 'Case script overrides speed, restriction area and oil temperature', /-override=w=[^,]+,A=[^,]+,T_oil=/.test(ex.files['cases.mos']));
   }
 
+  // ------------------------------------------------------------ 23. PDF drawing & STEP AP242
+
+  function suiteDrawingStep() {
+    const S = '23 · PDF drawing & STEP AP242';
+    const P = { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5, portsOn: false };
+    const p = design(P), r = G.analyse(p);
+
+    // PDF: header, cross-reference offsets, trailer, dimension texts.
+    const pdf = new TextDecoder('latin1').decode(G.drawing.technicalDrawing(p, r, { date: '2026-01-01' }));
+    check(S, 'PDF: header %PDF-1.4 and %%EOF', pdf.startsWith('%PDF-1.4') && pdf.trimEnd().endsWith('%%EOF'));
+    const xrefAt = +/startxref\n(\d+)/.exec(pdf)[1];
+    const offs = [...pdf.slice(xrefAt).matchAll(/^(\d{10}) 00000 n $/gm)].map(m => +m[1]);
+    check(S, `PDF: startxref points to the xref table; all ${offs.length} object offsets point to "k 0 obj"`,
+      pdf.slice(xrefAt, xrefAt + 4) === 'xref' && offs.every((o, k) => pdf.slice(o).startsWith(`${k + 1} 0 obj`)));
+    const len = +/\/Length (\d+) >>\nstream\n/.exec(pdf)[1], s0 = pdf.indexOf('stream\n') + 7;
+    check(S, 'PDF: content stream /Length matches the stream', pdf.slice(s0 + len, s0 + len + 10) === '\nendstream');
+    const need = ['Ø80', 'Ø' + (2 * p.innerTip).toFixed(2).replace(/\.?0+$/, ''), 'Ø18', 'OUTER ROTOR', 'INNER ROTOR', 'ASSEMBLY', 'PROFILE DATA', '16.177 cm³/rev'];
+    check(S, `PDF: dimension and table texts present (${need.length})`, need.every(t => pdf.includes('(' + G.drawing.pdfString(t)) || pdf.includes(G.drawing.pdfString(t))));
+    check(S, 'PDF: standard scale chosen so that the outer rotor fits the view (1:1 for OD 80)', pdf.includes('(1:1)'));
+
+    // STEP: references, closed manifold shells, Euler–Poincaré, volume = area × b.
+    for (const scope of ['outer', 'inner', 'assembly']) {
+      const txt = G.step.stepFile(p, r, { scope, date: '2026-01-01T00:00:00' });
+      const ck = G.step.checkStep(txt);
+      const regs = G.step.regions(p, scope, r);
+      check(S, `STEP ${scope}: AP242 schema, ${ck.entities} entities, no dangling #refs`,
+        /FILE_SCHEMA\(\('AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF/.test(txt) && ck.missingRefs === 0 && /END-ISO-10303-21;\s*$/.test(txt));
+      ck.shells.forEach((sh, i) => {
+        const g = regs[i].holes.length;                  // through-holes = genus
+        check(S, `STEP ${scope} / ${sh.name}: every edge used twice with opposite senses; Euler–Poincaré = 2(1 − ${g}) (${sh.euler})`,
+          sh.badEdges === 0 && sh.euler === 2 * (1 - g));
+        const vRef = (G.step.signedArea(regs[i].outer) + regs[i].holes.reduce((a, h) => a + G.step.signedArea(h), 0)) * p.b;
+        record(S, `STEP ${scope} / ${sh.name}: enclosed volume (divergence theorem) = area × b`, vRef, sh.volume, 1e-9);
+      });
+    }
+    // Faceting error: max deviation of a facet from the true inner profile (mid-parameter point vs chord).
+    // Facets are a subset of the dense profile (same point objects): check every dense point against its facet.
+    const reg = G.step.regions(p, 'inner', r)[0], dense = reg.dense, idx = new Map(dense.map((q, i) => [q, i]));
+    const kept = reg.outer.map(q => idx.get(q)).filter(i => i !== undefined).sort((a, b) => a - b), n = kept.length;
+    let dev = 0;
+    for (let s = 0; s < n; s++) {
+      const i0 = kept[s], i1 = s + 1 < n ? kept[s + 1] : kept[0] + dense.length, a = dense[i0], b = dense[i1 % dense.length];
+      const t = [b[0] - a[0], b[1] - a[1]], L = Math.hypot(t[0], t[1]);
+      for (let k = i0 + 1; k < i1; k++) {
+        const q = dense[k % dense.length];
+        dev = Math.max(dev, Math.abs((q[0] - a[0]) * t[1] - (q[1] - a[1]) * t[0]) / L);
+      }
+    }
+    check(S, `STEP inner profile: ${n} facets cover the ${dense.length}-point profile`, n === reg.outer.length && n > 50);
+    record(S, `STEP inner profile faceting (${n} facets): max deviation from the dense profile ≤ tolerance 2 µm`, 0, dev * 1000, 2, { abs: true, unit: 'µm' });
+    const exactInner = Math.abs(G.polygonArea(G.innerProfile(p, 20000, p.rp + p.c)));
+    record(S, 'STEP inner profile faceting: area vs 20 000-point profile', exactInner, Math.abs(G.step.signedArea(reg.outer)), 0.05);
+  }
+
   // ------------------------------------------------------------ 6. export
 
   function suiteExport() {
@@ -954,7 +1008,7 @@
   function runAll() {
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica]) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica, suiteDrawingStep]) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };

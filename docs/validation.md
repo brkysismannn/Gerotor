@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **252 pass · 0 fail · 3 known** (255 tests, ~135 s).
+Last run: 2026-10-23 — **271 pass · 0 fail · 3 known** (274 tests, ~140 s).
 
 ## Change log of the numerical core
 
@@ -336,6 +336,34 @@ two-way effect of a stiff outlet; the port volumes are therefore now port area �
 Compile ≈ 19 s, simulation ≈ 2 s. Differences in the model: cavitation by a smooth bulk-modulus drop instead
 of a void volume; orifice √ regularised below 100 Pa; outlet pressure two-way coupled (the browser ripple
 estimate is one-way, §20).
+
+## 23. PDF technical drawing and STEP AP242 (`js/drawing.js`, `js/step.js`)
+
+**PDF drawing** (A3 landscape, vector, Helvetica): outer rotor and inner rotor front views with diameter
+dimensions (OD, valley Ø, lobe-tip Ø; tip Ø, root Ø, bore Ø), side views with the width, assembly view with the
+eccentricity, profile-data table (N, e, R, r_p, c, R_v, b, λ, displacement, max tool Ø), notes and title block;
+largest standard scale with the outer rotor ≤ 115 mm. Checked: PDF header/trailer, every xref offset points to
+its object, stream length, dimension texts present; rendered with pdf.js and inspected.
+
+**STEP AP242** (ISO 10303-242 MIM LF): per rotor a `MANIFOLD_SOLID_BREP` — planar top/bottom faces with inner
+bounds, one planar side face per profile segment (faceted, fine resolution); product structure, mm units,
+1e-7 uncertainty; scope outer / inner / assembly (two solids, inner rotor at x = e).
+
+| Check (default design) | Result |
+|---|---|
+| All `#` references defined | 0 missing (outer ≈ 1.1 MB, inner ≈ 0.8 MB, assembly ≈ 1.9 MB) |
+| Every edge used exactly twice with opposite senses (closed manifold shell) | ✓ all shells |
+| Euler–Poincaré V − E + F − (L − F) = 2(1 − G), G = through-holes | 0 = 0 (rotors with a hole) |
+| Enclosed volume by the divergence theorem = region area × b | exact (1e-9 %) |
+| Facets: tolerance-driven (max deviation 2 µm from a 24 000-point profile; circles by chord height) | 462 inner-profile facets, max deviation 1.9997 µm |
+| Faceting: inner-profile area vs 20 000-point profile | 0.0006 % |
+
+A first version sampled the profile uniformly in the trochoid parameter (720 facets): the facet deviation reached
+13.8 µm at the tooth root, where the offset profile moves fastest — replaced by the tolerance-driven facets.
+
+Not yet verified by importing into a CAD kernel (no CAD system on this machine); the faceted side faces are
+exact to the profile polylines. Planned: B-spline side faces (exact surfaces) once a STEP reader is available
+for validation.
 
 ## 6. Export
 
