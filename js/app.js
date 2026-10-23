@@ -333,7 +333,6 @@
       chambers: $('optChambers').checked,
       ports: $('optPorts').checked,
       contacts: $('optContacts').checked,
-      flow: $('optFlow').checked,
       pitch: $('optPitch').checked,
       trochoid: $('optTrochoid').checked,
     };
