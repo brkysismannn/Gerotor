@@ -426,3 +426,17 @@ body[data-step="5"] .canvas-wrap { flex: 1 1 auto; aspect-ratio: auto; max-heigh
 .panel.results { grid-template-rows: auto 1fr; }
 #checksSec { align-self: end; }
 
+
+/* ---- v4: model uses the full right column again; Results page (step 5) full width; Outputs = step 6 */
+.canvas-wrap { flex: 1 1 auto; aspect-ratio: auto; max-height: none; border-top: none; min-height: 220px; }
+body[data-step="6"] .canvas-wrap { flex: 1 1 auto; }
+body[data-step="5"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "results"; }
+body[data-step="5"] .layout > .panel.params, body[data-step="5"] .layout > .stage { display: none; }
+body[data-step="5"] .panel.results { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); padding: 10px 18px; gap: 12px 24px; }
+body[data-step="5"] #metricsSec { grid-row: span 3; }
+body[data-step="5"] .result-wide { grid-column: span 2; }
+body[data-step="5"] .result-chart .chart { height: 170px; }
+.metrics dt.grp { grid-column: 1 / -1; margin-top: 6px; padding-bottom: 2px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: .04em; }
+.metrics dt.grp:first-child { margin-top: 0; }
+body[data-step="5"] .panel.results { grid-template-rows: none; grid-auto-rows: min-content; }
+

@@ -15,7 +15,8 @@
       <button type="button" data-go="2"><b>2</b>Ports</button>
       <button type="button" data-go="3"><b>3</b>Fluid</button>
       <button type="button" data-go="4"><b>4</b>Performance</button>
-      <button type="button" data-go="5"><b>5</b>Outputs</button>
+      <button type="button" data-go="5"><b>5</b>Results</button>
+      <button type="button" data-go="6"><b>6</b>Outputs</button>
       <span class="help" id="stepHelp" tabindex="0" aria-label="About this step">?<span class="tip" id="stepIntro"></span></span>
     </nav>
     <button id="assistOpen" class="primary topbtn" type="button">Design Assist</button>
@@ -259,7 +260,7 @@
               <input name="faceMu" type="number" min="0" step="0.01" value="0.08"></label>
           </div>
         </fieldset>
-        <fieldset data-steps="5">
+        <fieldset data-steps="6">
           <legend>Design summary</legend>
           <dl class="metrics small" id="summary"></dl>
         </fieldset>
@@ -276,22 +277,6 @@
     </aside>
 
     <section class="stage">
-      <div class="stage-top" id="stageTop">
-        <section data-steps="1">
-          <h2>Chamber area <small>mm² · housing angle</small></h2>
-          <canvas class="chart" id="areaChart"></canvas>
-          <div class="chart-legend" id="areaLegend"></div>
-        </section>
-        <section data-steps="2 3">
-          <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
-          <canvas class="chart" id="pressureChart"></canvas>
-        </section>
-        <section data-steps="2 3 4">
-          <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
-          <canvas class="chart" id="flowChart"></canvas>
-          <div class="chart-legend" id="flowLegend"></div>
-        </section>
-      </div>
       <div class="canvas-wrap">
         <canvas id="view"></canvas>
         <div class="legend">
@@ -321,11 +306,11 @@
     <aside class="panel results">
       <div class="kpis" id="kpis"></div>
       <div class="popover" id="checksPop" hidden></div>
-      <section data-steps="1 2 3 4">
+      <section data-steps="1 2 3 4 5" id="metricsSec">
         <h2 id="metricsTitle">Results</h2>
         <dl class="metrics" id="metrics"></dl>
       </section>
-      <section data-steps="4">
+      <section data-steps="5" class="result-wide">
         <h2>Charts <small>pump performance range</small></h2>
         <form id="mapForm" class="params" autocomplete="off">
           <div class="grid2">
@@ -356,15 +341,29 @@
         <div class="note" id="mapStatus"></div>
         <div class="note" id="maxStatus"></div>
       </section>
-      <section data-steps="1 2">
+      <section data-steps="5" class="result-chart">
+        <h2>Chamber area <small>mm² · housing angle</small></h2>
+        <canvas class="chart" id="areaChart"></canvas>
+        <div class="chart-legend" id="areaLegend"></div>
+      </section>
+      <section data-steps="5" class="result-chart">
+        <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
+        <canvas class="chart" id="pressureChart"></canvas>
+      </section>
+      <section data-steps="5" class="result-chart">
+        <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
+        <canvas class="chart" id="flowChart"></canvas>
+        <div class="chart-legend" id="flowLegend"></div>
+      </section>
+      <section data-steps="1 2 5">
         <h2>Dimensions</h2>
         <dl class="metrics small" id="dims"></dl>
       </section>
-      <section data-steps="1 2 3 4" id="checksSec">
+      <section data-steps="1 2 3 4 5" id="checksSec">
         <h2>Checks <small id="checksCount"></small> <button type="button" class="linkbtn" id="checksAll">Show passed</button></h2>
         <ul class="checks" id="checks"></ul>
       </section>
-      <section data-steps="5">
+      <section data-steps="6">
         <h2>Export</h2>
         <div class="export">
           <select id="exportScope">
@@ -382,7 +381,7 @@
           <button type="button" id="stepBtn">STEP AP242</button>
         </div>
       </section>
-      <section data-steps="5">
+      <section data-steps="6">
         <h2>OpenModelica <small>system model</small></h2>
         <p class="note">Builds a Modelica package (gerotor, outlet volume, load restriction, tanks, speed source) from the
           current design and the case table of the Charts range, then opens it in OMEdit (local server needed).</p>

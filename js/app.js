@@ -196,10 +196,19 @@
       );
     }
     // Each result row is shown in the wizard steps it belongs to.
-    $('metrics').innerHTML = m.map(([k, v, big]) => {
-      const s = metricSteps(k);
-      return `<dt data-steps="${s}">${k}</dt><dd data-steps="${s}"${big ? ' class="big"' : ''}>${v}</dd>`;
-    }).join('');
+    // On the Results page (step 5) the rows are grouped under headings.
+    const rows = m.map(([k, v, big]) => ({ k, v, big, g: metricGroup(k) }));
+    let html = '';
+    for (const [gi, title] of METRIC_GROUPS.entries()) {
+      const grp = rows.filter(r => r.g === gi);
+      if (!grp.length) continue;
+      html += `<dt class="grp" data-steps="5">${title}</dt>`;
+      html += grp.map(({ k, v, big }) => {
+        const s = metricSteps(k);
+        return `<dt data-steps="${s}">${k}</dt><dd data-steps="${s}"${big ? ' class="big"' : ''}>${v}</dd>`;
+      }).join('');
+    }
+    $('metrics').innerHTML = html;
     updateKpis(p, ok, pr, ct, me);
 
     const d = [
@@ -235,15 +244,22 @@
   }
 
   // Wizard step(s) of a result row, by its label.
+  // [label pattern, wizard steps, group on the Results page]
   const STEP_OF = [
-    [/^(Displacement|Theoretical flow|Flow ripple$|Ideal torque|Hydraulic power|λ|Inner tip speed|Max tool)/, '1 5'],
-    [/^(Delivery flow|Volumetric efficiency|Port timing|Flow ripple \(port|Chamber pressure|Outlet pressure|Inlet port|Max speed)/, '2 3'],
-    [/^(Leak flows)/, '3'],
-    [/^(Shaft torque|Shaft side load|Contact force|Hertz|Sliding|Wear|Mechanical|Input power|Losses|Floor friction|Tooth-pass|Ripple harmonics)/, '4'],
+    [/^(Displacement|Theoretical flow|Flow ripple$|Ideal torque|Hydraulic power|λ|Inner tip speed|Max tool)/, '1 5', 0],
+    [/^(Delivery flow|Volumetric efficiency|Port timing|Flow ripple \(port|Chamber pressure|Outlet pressure|Inlet port|Max speed)/, '2 3 5', 1],
+    [/^(Leak flows)/, '3 5', 2],
+    [/^(Shaft torque|Shaft side load|Contact force|Hertz|Sliding|Wear|Mechanical|Input power|Losses|Floor friction)/, '4 5', 3],
+    [/^(Tooth-pass|Ripple harmonics)/, '4 5', 1],
   ];
+  const METRIC_GROUPS = ['Geometry & kinematics', 'Ports, flow & pressure', 'Leakage', 'Loads, contact & efficiency', 'Other'];
   function metricSteps(label) {
     for (const [re, s] of STEP_OF) if (re.test(label)) return s;
-    return '1 2 3 4';
+    return '1 2 3 4 5';
+  }
+  function metricGroup(label) {
+    for (const [re, , g] of STEP_OF) if (re.test(label)) return g;
+    return 4;
   }
 
   // Key results shown on every step.
@@ -275,12 +291,14 @@
     1: 'Rotor geometry: lobes, eccentricity, lobe radius and clearance, outer rotor body. Design Assist (top right) finds a geometry from a flow target.',
     2: 'Port plate: port radii, timing, grooves, corner radii and porting type; operating point for the chamber pressure model.',
     3: 'Fluid: oil from the library or your datasheet (ASTM D341), temperature, and the internal leakage gaps.',
-    4: 'Performance: friction and materials; efficiencies, contact stress and shaft loads at the operating point. "Create charts" sweeps speed × pressure.',
-    5: 'Outputs: drawings (PDF), CAD (STEP AP242, DXF, SVG), point data, the OpenModelica system model and the case table.',
+    4: 'Performance: friction and materials; efficiencies, contact stress and shaft loads at the operating point.',
+    5: 'Results: all results of the design at the operating point, the chamber charts, the checks, and the speed × pressure charts ("Create charts", Excel export).',
+    6: 'Outputs: drawings (PDF), CAD (STEP AP242, DXF, SVG), point data, the OpenModelica system model and the case table.',
   };
+  const LAST_STEP = 6;
   let step = 1;
   function setStep(n) {
-    step = Math.min(5, Math.max(1, n));
+    step = Math.min(LAST_STEP, Math.max(1, n));
     document.body.dataset.step = String(step);
     document.querySelectorAll('#steps button').forEach(b => {
       const s = +b.dataset.go;
@@ -289,7 +307,7 @@
     });
     $('stepIntro').textContent = STEP_INTRO[step];
     $('stepBack').disabled = step === 1;
-    $('stepNext').textContent = step === 5 ? 'Back to geometry' : 'Next →';
+    $('stepNext').textContent = step === LAST_STEP ? 'Back to geometry' : 'Next →';
     try { localStorage.setItem('gerotor.step', String(step)); } catch (_) { /* storage unavailable */ }
     // Canvases that were hidden have no size yet: redraw after layout.
     requestAnimationFrame(() => { drawCharts(); if (lastOil) drawOilCurve(lastOil.oil, lastOil.T); });
@@ -551,7 +569,7 @@
   });
   document.addEventListener('click', ev => { if (!ev.target.closest('#checksPop')) $('checksPop').hidden = true; });
   $('stepBack').addEventListener('click', () => setStep(step - 1));
-  $('stepNext').addEventListener('click', () => setStep(step === 5 ? 1 : step + 1));
+  $('stepNext').addEventListener('click', () => setStep(step === LAST_STEP ? 1 : step + 1));
 
   writeForm(restore());
   recompute();
