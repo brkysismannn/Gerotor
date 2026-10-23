@@ -896,8 +896,16 @@
     const ex = G.modelica.exportModelica(p, r, { name: 'Test pump 1', rpmMin: 1000, rpmMax: 3000, nRpm: 3, dpMin: 20, dpMax: 100, nDp: 2 });
     const mo = ex.files[ex.name + '.mo'];
     check(S, `Package name sanitised to a Modelica identifier (${ex.name})`, /^[A-Za-z_][A-Za-z0-9_]*$/.test(ex.name));
-    check(S, 'Package contains connector, gerotor, volume, restriction, tank and the system example',
-      ['connector FluidPort', 'model Gerotor', 'model Volume', 'model Restriction', 'model Tank', 'model PumpSystem', `end ${ex.name};`].every(s => mo.includes(s)));
+    check(S, 'Package contains connector, network components (rotor, chamber, tip gap, axial gap, port land, friction), lumped gerotor, volume, restriction, tank, examples',
+      ['connector FluidPort', 'model Rotor', 'model Chamber', 'model TipGap', 'model AxialGap', 'model PortLand', 'model GerotorFriction',
+        'model GerotorLumped', 'model Volume', 'model Restriction', 'model Tank', 'model PumpSystem', 'model PumpSystemLumped', `end ${ex.name};`].every(s => mo.includes(s)));
+    const nVol = (mo.match(/Components\.Chamber Vol\d+\(k=\d+\)/g) || []).length, nGap = (mo.match(/Components\.TipGap gap\d+\(k=\d+\)/g) || []).length;
+    check(S, `Network: one chamber and one tip gap per lobe (${nVol} / ${nGap}, N = ${p.N})`, nVol === p.N && nGap === p.N);
+    const fd = G.modelica.frictionData(p, r), w1 = p.rpm * TAU / 60;
+    record(S, 'Friction block: C_visc·ω + K_floor·Δp = M_shaft − M_pressure (design point)', r.mech.Mshaft - r.contact.torqueMean,
+      fd.Cvisc * w1 + fd.Kfloor * p.dp * 1e5, 1e-9);
+    const ps = design(Object.assign({}, P, { dblIn: false, dblOut: false, shadow: false })), rs = G.analyse(ps), fs = G.modelica.frictionData(ps, rs);
+    record(S, 'Friction block, single-sided ports: floor friction term', rs.mech.Mshaft - rs.contact.torqueMean, fs.Cvisc * w1 + fs.Kfloor * ps.dp * 1e5, 1e-9);
     const tab = G.modelica.tables(p, r);
     check(S, `Angle table: M + 1 rows (${tab.length}), θ from 0 to 2π`, tab.length === r.M + 1 && tab[0][0] === 0 && Math.abs(tab[r.M][0] - TAU) < 1e-9);
     record(S, 'Table: chamber area column = analysis area (SI)', r.A[10] * 1e-6, tab[10][1], 1e-12);

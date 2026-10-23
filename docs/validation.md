@@ -3,7 +3,7 @@
 Run the suite by opening `tests/index.html` (served or from file). Every new feature must add tests here
 and keep the suite at **0 fail**. Status `known` marks a documented open discrepancy, not a regression.
 
-Last run: 2026-10-23 — **243 pass · 0 fail · 3 known** (246 tests, ~135 s).
+Last run: 2026-10-23 — **246 pass · 0 fail · 3 known** (249 tests, ~135 s).
 
 ## Change log of the numerical core
 
@@ -300,6 +300,22 @@ all table rows numeric, case count and `.mos` commands, restriction sizing law, 
 | Shaft (pressure) torque | 25.74 N·m (×100.8/100 = 25.95) | 25.95 N·m | ≈ 0 |
 | Min chamber pressure | 0.846 bar | 0.847 bar | ≈ 0 |
 | `checkModel` | — | 114 equations / 114 variables, passed | — |
+
+**Network model (GT-SUITE layout).** `Examples.PumpSystem` is built from separate components like the GT model
+Gerotor Design Studio generates: `Vol1…VolN` (chamber volumes with their In/Out port orifices, placed on a ring at
+their housing angles), `gap1…gapN` (tip gaps), `Axial_Gap` (face gaps to periphery and bore), `Port_Land`,
+`InletEnv → InletLine → InletVol`, `OutletVol → OutletRestriction → OutletEnv`, `rotor` (PumpAnalysis: angle to
+all chambers, chamber torques summed on its flange), `GerotorFriction` (viscous + floor-friction loss torque,
+coefficients from js/friction.js, reads outlet/inlet pressure), `PumpMechShaft` (rotor inertia),
+`PumpGearRatio`, `EngineSpeed`. `PumpSystemLumped` keeps the one-block gerotor.
+
+| Check (default design, 1500 rpm, 100 bar) | Result |
+|---|---|
+| Network vs lumped: pressure torque | 25.94853 vs 25.94842 N·m |
+| Network vs lumped: mean outlet pressure | 101.7917 vs 101.7918 bar |
+| Network: shaft torque incl. losses vs browser (25.95 pressure + 1.646 friction) | 27.595 vs 27.59 N·m |
+| `checkModel` of the network system | 250 equations / 250 variables |
+| In-browser: one chamber + one tip gap per lobe; friction block reproduces M_shaft − M_pressure (balanced and single-sided) | exact |
 
 Compile ≈ 19 s, simulation ≈ 2 s. Differences in the model: cavitation by a smooth bulk-modulus drop instead
 of a void volume; orifice √ regularised below 100 Pa; outlet pressure two-way coupled (the browser ripple
