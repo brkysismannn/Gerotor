@@ -16,6 +16,7 @@
       <button type="button" data-go="3"><b>3</b>Fluid</button>
       <button type="button" data-go="4"><b>4</b>Performance</button>
       <button type="button" data-go="5"><b>5</b>Outputs</button>
+      <span class="help" id="stepHelp" tabindex="0" aria-label="About this step">?<span class="tip" id="stepIntro"></span></span>
     </nav>
     <button id="assistOpen" class="primary topbtn" type="button">Design Assist</button>
     <button id="themeToggle" class="ghost" type="button" title="Toggle theme">◐</button>
@@ -90,7 +91,6 @@
   <main class="layout">
     <aside class="panel params">
       <form id="params" autocomplete="off">
-        <p class="step-intro" id="stepIntro"></p>
         <fieldset data-steps="1">
           <legend>Geometry</legend>
           <label>Outer rotor lobes <i>N</i>
@@ -276,6 +276,22 @@
     </aside>
 
     <section class="stage">
+      <div class="stage-top" id="stageTop">
+        <section data-steps="1">
+          <h2>Chamber area <small>mm² · housing angle</small></h2>
+          <canvas class="chart" id="areaChart"></canvas>
+          <div class="chart-legend" id="areaLegend"></div>
+        </section>
+        <section data-steps="2 3">
+          <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
+          <canvas class="chart" id="pressureChart"></canvas>
+        </section>
+        <section data-steps="2 3 4">
+          <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
+          <canvas class="chart" id="flowChart"></canvas>
+          <div class="chart-legend" id="flowLegend"></div>
+        </section>
+      </div>
       <div class="canvas-wrap">
         <canvas id="view"></canvas>
         <div class="legend">
@@ -304,23 +320,10 @@
 
     <aside class="panel results">
       <div class="kpis" id="kpis"></div>
+      <div class="popover" id="checksPop" hidden></div>
       <section data-steps="1 2 3 4">
         <h2 id="metricsTitle">Results</h2>
         <dl class="metrics" id="metrics"></dl>
-      </section>
-      <section data-steps="1">
-        <h2>Chamber area <small>mm² · housing angle</small></h2>
-        <canvas class="chart" id="areaChart"></canvas>
-        <div class="chart-legend" id="areaLegend"></div>
-      </section>
-      <section data-steps="2 3">
-        <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
-        <canvas class="chart" id="pressureChart"></canvas>
-      </section>
-      <section data-steps="2 3 4">
-        <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
-        <canvas class="chart" id="flowChart"></canvas>
-        <div class="chart-legend" id="flowLegend"></div>
       </section>
       <section data-steps="4">
         <h2>Charts <small>pump performance range</small></h2>
@@ -357,7 +360,7 @@
         <h2>Dimensions</h2>
         <dl class="metrics small" id="dims"></dl>
       </section>
-      <section data-steps="1 2 3 4">
+      <section data-steps="1 2 3 4" id="checksSec">
         <h2>Checks <small id="checksCount"></small> <button type="button" class="linkbtn" id="checksAll">Show passed</button></h2>
         <ul class="checks" id="checks"></ul>
       </section>

@@ -256,9 +256,10 @@
       ['Vol. efficiency', pr && pr.sim ? f(pr.portEfficiency * 100, 1) : '—', '%'],
       ['Overall efficiency', me ? f(me.etaT * 100, 1) : '—', '%'],
       ['Hertz max', ct ? f(ct.pmaxMax / 1e6, 0) : '—', 'MPa'],
-      ['Checks', ok ? (nErr ? `${nErr} error${nErr > 1 ? 's' : ''}` : nWarn ? `${nWarn} warning${nWarn > 1 ? 's' : ''}` : 'all OK') : 'invalid', '', nErr ? 'err' : nWarn ? 'warn' : ''],
+      ['Checks', ok ? (nErr ? `${nErr} error${nErr > 1 ? 's' : ''}` : nWarn ? `${nWarn} warning${nWarn > 1 ? 's' : ''}` : 'all OK') : 'invalid', '', nErr ? 'err' : nWarn ? 'warn' : '', 'checks'],
     ];
-    $('kpis').innerHTML = k.map(([n, v, u, cls]) => `<div class="kpi ${cls || ''}"><div class="k">${n}</div><div class="v">${v}${u ? `<small>${u}</small>` : ''}</div></div>`).join('');
+    $('kpis').innerHTML = k.map(([n, v, u, cls, id]) => `<div class="kpi ${cls || ''}"${id ? ` data-kpi="${id}" title="Show the checks"` : ''}><div class="k">${n}</div><div class="v">${v}${u ? `<small>${u}</small>` : ''}</div></div>`).join('');
+    if (!$('checksPop').hidden) fillChecksPop();
     // Design summary (Outputs step).
     $('summary').innerHTML = [
       ['Lobes / teeth', `${p.N} / ${p.N - 1}`], ['e / R / rp / c', `${f(p.e, 3)} / ${f(p.R, 3)} / ${f(p.rp, 3)} / ${f(p.c, 3)} mm`],
@@ -532,6 +533,23 @@
   })();
 
   $('checksAll').addEventListener('click', () => { $('checks').classList.toggle('showall'); updateChecks(); });
+
+  // Checks KPI → popover with the warnings / errors.
+  function fillChecksPop() {
+    const order = { err: 0, warn: 1, info: 2, ok: 3 };
+    const items = res && res.checks ? res.checks.filter(c => c.level !== 'ok').sort((a, b) => order[a.level] - order[b.level]) : [];
+    $('checksPop').innerHTML = `<h3>Checks to review (${items.length})</h3>` + (items.length
+      ? `<ul class="checks showall">${items.map(c => `<li class="${c.level}"><b>${c.title}</b><span>${c.detail}</span></li>`).join('')}</ul>`
+      : '<p class="note">All checks passed.</p>');
+  }
+  $('kpis').addEventListener('click', ev => {
+    if (!ev.target.closest('[data-kpi="checks"]')) return;
+    ev.stopPropagation();
+    const pop = $('checksPop');
+    pop.hidden = !pop.hidden;
+    if (!pop.hidden) fillChecksPop();
+  });
+  document.addEventListener('click', ev => { if (!ev.target.closest('#checksPop')) $('checksPop').hidden = true; });
   $('stepBack').addEventListener('click', () => setStep(step - 1));
   $('stepNext').addEventListener('click', () => setStep(step === 5 ? 1 : step + 1));
 
