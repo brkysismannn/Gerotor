@@ -1043,10 +1043,128 @@
     record(S, 'CSV inner profile first point = root radius', p.innerRoot, Math.hypot(+csv[3], +csv[4]), 1e-3);
   }
 
+  // ------------------------------------------------------------ 7. project file, history, calc adapter, report
+
+  function suiteProject() {
+    const S = '24 · Project file, undo, calc adapter, report';
+    const P = G.project;
+    const raw = Object.assign({}, BASE, { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5,
+      portsOn: true, leakOn: true, oil: 'custom', oilT: 40, tipGapModel: 'backlash', Ein: 210, nuIn: 0.3, Eout: 210, nuOut: 0.3,
+      dblIn: false, dblOut: false, shadow: true, fillet: 0, outletVol: 0, portFillet: 0, grooveD: 0 });
+    delete raw.faceSupport; delete raw.doubleFill;       // legacy keys are derived on save, not part of the UI design
+    // SHA-256 known-answer vectors (FIPS 180-4).
+    check(S, 'SHA-256("abc")', P.sha256Sync('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    check(S, 'SHA-256("") ', P.sha256Sync('') === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+    check(S, 'SHA-256 two-block message', P.sha256Sync('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq') === '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1');
+    check(S, 'canonical JSON is key-order independent', P.canonical({ b: 1, a: [2, { d: 1, c: 2 }] }) === P.canonical({ a: [2, { c: 2, d: 1 }], b: 1 }) && P.canonical({ b: 1, a: 2 }) === '{"a":2,"b":1}');
+    // Save / load round trip.
+    const st = P.create(raw);
+    st.meta.project = 'Test <pump> & "co"'; st.meta.partNo = 'GP-100'; st.meta.revision = 'B'; st.meta.author = 'AB'; st.meta.checker = 'CD'; st.meta.notes = 'line1\nline2';
+    st.loadCases.push({ name: 'Cold start', rpm: 800, dp: 150, oilT: -10, pIn: 0.8 }); st.activeCase = 1;
+    const text = P.serialize(st);
+    const back = P.parse(text, raw);
+    check(S, 'round trip: design identical', P.canonical(back.design) === P.canonical(st.design));
+    check(S, 'round trip: metadata identical', ['project', 'partNo', 'revision', 'author', 'checker', 'notes', 'scope'].every(k => back.meta[k] === st.meta[k]) && back.calcMode === 'js');
+    check(S, 'round trip: load cases and active case identical', P.canonical(back.loadCases) === P.canonical(st.loadCases) && back.activeCase === 1);
+    const doc = JSON.parse(text);
+    check(S, 'file follows schema gerotor-project/3: top-level keys, metadata names, operatingPoints items',
+      doc.schema === 'gerotor-project/3' && Object.keys(doc).every(k => ['schema', 'metadata', 'design', 'fluid', 'operatingPoints', 'measured', 'settings', 'results'].includes(k)) &&
+      doc.metadata.projectName === st.meta.project && doc.metadata.partNo === 'GP-100' && Array.isArray(doc.metadata.revisions) && !!doc.metadata.signOff.checker &&
+      doc.operatingPoints.length === 2 && doc.operatingPoints.every(o => Object.keys(o).every(k => ['name', 'rpm', 'dp', 'oilT', 'pIn', 'nu'].includes(k))) &&
+      doc.metadata.workspace.activeCase === 1 && doc.results === null && doc.design.N === 7 && !('faceSupport' in doc.design) && !('doubleFill' in doc.design) && doc.design.dblIn === false && doc.design.shadow === true && doc.fluid.oil === 'custom' && !('oil' in doc.design) && !('fluid' in doc.design));
+    check(S, 'operating point carries oilT / pIn as fields (no note) and survives the round trip', doc.operatingPoints[1].oilT === -10 && doc.operatingPoints[1].pIn === 0.8 && !('note' in doc.operatingPoints[1]) && back.loadCases[1].oilT === -10 && back.loadCases[1].pIn === 0.8);
+    check(S, 'input hash survives the round trip', P.inputHashSync(back) === P.inputHashSync(st));
+    const h0 = P.inputHashSync(st);
+    const st2 = P.parse(text, raw); st2.meta.notes = 'changed';
+    check(S, 'hash ignores metadata (notes)', P.inputHashSync(st2) === h0);
+    st2.design.e = 3.5;
+    check(S, 'hash changes with a design input', P.inputHashSync(st2) !== h0);
+    const st3 = P.parse(text, raw); st3.loadCases[1].oilT = 20;
+    check(S, 'hash changes with a load-case oil temperature', P.inputHashSync(st3) !== h0);
+    // Backend compatibility: input hash of backend/schema/example.project.json as computed by backend/api/project.py input_hash.
+    const ex = { design: { N: 7, e: { value: 3, unit: 'mm' }, R: 30, rp: 8, b: 20, c: 0.03, OD: 80, bore: 18, RvAuto: true, RvClear: 0.5, rpm: 1500, dp: 100, portsOn: true, leakOn: true, pIn: 1, pVap: 0.2, rho: 860, bulk: 1400, Cd: 0.7, nu: 30, axialClr: 0.05, odClr: 0.15, jbLen: 0, jbClr: 0.04, faceSupport: 'balanced', faceMu: 0.08, simSub: 4 },
+      operatingPoints: [{ name: 'rated', rpm: 1500, dp: 100 }, { name: 'low speed', rpm: 600, dp: 50 }],
+      settings: { samples: 24, contactQuasiStatic: false, maxSpeed: { enabled: false }, variants: { cavHead: 'inlet', clearanceInput: 'equidistance', cavAreaDoubleFill: true, clearanceConvention: 'diametral', journal: null, lambdaConvention: 'ivanovic' }, acceptanceCriteria: { authority: null, status: 'pending', criteria: [] } },
+      metadata: { projectName: 'ignored' }, results: null };
+    check(S, 'input hash equals the Python backend hash of schema/example.project.json', P.sha256Sync(P.canonical(P.inputsOfDoc(ex))) === '3041151f0f9db69a223c35b7b9fee0802dafbc1f2378738e297d1f8b327bf304');
+    check(S, 'canonical JSON is RFC 8785 (JCS): UTF-8 non-ASCII unescaped, ES number format', P.sha256Sync(P.canonical(P.inputsOfDoc({ design: { N: 7, e: 3, note: 'Ölpumpe µm' }, operatingPoints: [{ name: 'a', rpm: 1500, dp: 100 }] }))) === '4d710e6325ca72c17400191a6f779010e1edd3aa5b7ac1b06994465ad3c91c30' && P.sha256Sync(P.canonical({ design: { c: 1e-7, e: 3 }, operatingPoints: [{ name: 'a', rpm: 1500, dp: 100 }] })) === '455301ff4d0aa7b17e14bb70f91e0c27e6493d3f78bd1d2f55872c0cf9c54247');
+    const exParsed = P.parse(JSON.stringify(Object.assign({}, ex, { schema: 'gerotor-project/2', metadata: { projectName: 'Example', revision: 'A', revisions: [{ rev: 'A', date: '2026-10-30', author: 'x', description: 'first' }] } })), raw);
+    check(S, 'backend example loads: {value, unit} unwrapped, missing keys defaulted, revisions kept', exParsed.design.e === 3 && exParsed.design.Ein === 210 && exParsed.loadCases.length === 2 && exParsed.loadCases[1].rpm === 600 && exParsed.meta.revisions[0].description === 'first' && exParsed.settings.samples === 24);
+    const legacy = P.parse(JSON.stringify(raw), raw);
+    check(S, 'legacy bare parameter JSON loads as a project', legacy.design.N === 7 && legacy.loadCases.length === 1 && legacy.meta.revision === 'A');
+    const bad = (t) => { try { P.parse(t, raw); return false; } catch (e) { return true; } };
+    check(S, 'invalid files are rejected (not JSON / array / future schema / no design / foreign JSON)',
+      bad('{nope') && bad('[1]') && bad('{"schema":"gerotor-project/99","design":{}}') && bad('{"schema":"gerotor-project/2"}') && bad('{"a":1}'));
+    check(S, 'wrong field type is rejected', bad(JSON.stringify({ schema: 'gerotor-project/2', metadata: { projectName: 'x' }, design: Object.assign({}, raw, { N: 'seven' }) })));
+    check(S, 'file name from part number and revision', P.fileName({ partNo: 'GP 100/A', project: 'x', revision: 'B' }) === 'GP_100_A_revB.gerotor.json');
+    // History.
+    const hs = new P.History(5);
+    hs.reset({ v: 0 });
+    hs.push({ v: 1 }, 'a', 0); hs.push({ v: 2 }, 'a', 100); hs.push({ v: 3 }, 'b', 200);
+    check(S, 'history coalesces edits of the same field within 600 ms', hs.undoS.length === 2);
+    check(S, 'undo / redo restore snapshots', hs.undo().v === 2 && hs.undo().v === 0 && hs.undo() === null && hs.redo().v === 2 && hs.redo().v === 3 && hs.redo() === null);
+    hs.undo(); hs.push({ v: 9 }, 'c', 5000);
+    check(S, 'a new edit clears the redo stack; identical snapshot is ignored', !hs.canRedo() && hs.push({ v: 9 }, 'c', 9000) === false);
+    // Recent list with a fake storage.
+    const mem = {}, store = { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = v; } };
+    for (let i = 0; i < 10; i++) P.recentAdd(store, 'f' + i, 'x', 8);
+    P.recentAdd(store, 'f5', 'y', 8);
+    const rl = P.recentList(store);
+    check(S, 'recent list: max 8, most recent first, no duplicates', rl.length === 8 && rl[0].name === 'f5' && rl[0].text === 'y' && rl.filter(r => r.name === 'f5').length === 1);
+    // Calc adapter.
+    const out = G.Calc.run(raw);
+    record(S, 'Calc adapter (js) displacement equals derive+analyse', G.analyse(G.derive(raw)).cc, out.res.cc, 1e-9);
+    check(S, 'Calc adapter: unknown mode refused, registered mode selectable, async path available',
+      G.Calc.setMode('nope') === false && (G.Calc.register('test', { sync: false, run: r => ({ params: null, res: null }) }), G.Calc.setMode('test')) && G.Calc.run(raw).note.length > 0 && (G.Calc.setMode('js'), G.Calc.mode === 'js') && typeof G.Calc.runAsync === 'function');
+    // Report.
+    const hash = P.inputHashSync(st);
+    st.meta.scope = 'Steady-state analysis of the N7 reference pump.';
+    const html = G.report.build(st, out.params, out.res, hash, { date: '2026-10-30', caseResults: [{ name: 'Rated', rpm: 1500, dp: 100, flow: 10, etaV: 90, etaT: 80, hertz: 500, status: 'VALID' }] });
+    check(S, 'report: cover has ident block, status, report ID and the full input hash', html.includes('GP-100') && html.includes('Calculation status:') && html.includes('GR-' + hash.slice(0, 10).toUpperCase() + '-20261030') && html.includes('id="inputHash">' + hash));
+    check(S, 'report: all content sections present (inputs, results, cycle stats, checks, methods, references, validation, revisions, sign-off)',
+      ['Input data', 'Geometry', 'Kinematics and flow', 'Contact and Hertz', 'Friction and mechanical', 'Ports and cavitation', 'Cycle statistics', 'Load case results', 'Checks, warnings', 'Methods and assumptions', 'References', 'Software and validation', 'Revision history', 'Sign-off', 'Scope statement'].every(s => html.includes(s)));
+    check(S, 'report: page numbers via @page counters, print button, software version stamped', /counter\(page\)/.test(html) && /counter\(pages\)/.test(html) && html.includes(P.VERSION.core));
+    check(S, 'report: user text is HTML-escaped', html.includes('Test &lt;pump&gt; &amp; &quot;co&quot;') && !html.includes('<pump>'));
+    check(S, 'report: inputs table lists symbols/units and the c definition (peak tip gap about 2c); OD clearance marked diametral',
+      html.includes('data-key="c"') && html.includes('peak tip gap is about 2c') && html.includes('DIAMETRAL clearance between outer-rotor OD'));
+    const ser = G.report.series(out.params, out.res);
+    check(S, 'report series: min <= mean <= max for ' + ser.length + ' quantities', ser.length >= 5 && ser.every(r => r.min <= r.mean + 1e-9 && r.mean <= r.max + 1e-9));
+    const sv = G.report.status(out.res);
+    check(S, 'report status of a valid design is not INVALID', sv.valid === true && /^VALID/.test(sv.text));
+    // Round 2: units, /2 migration, worst-case status, stamp, methods from the backend registry.
+    const inDoc = { schema: 'gerotor-project/3', metadata: { projectName: 'u' }, design: Object.assign({}, raw, { e: { value: 0.118110236, unit: 'in' }, N: 7 }), operatingPoints: [{ name: 'a', rpm: 1000, dp: 20, oilT: { value: 313.15, unit: 'K' }, pIn: 1 }] };
+    const inSt = P.parse(JSON.stringify(inDoc), raw);
+    check(S, 'R-P1: {value, unit} is converted on load (0.118110236 in -> 3 mm, 313.15 K -> 40 degC)', Math.abs(inSt.design.e - 3) < 1e-6 && Math.abs(inSt.loadCases[0].oilT - 40) < 1e-9);
+    check(S, 'R-P1: wrong-dimension or unknown unit is rejected, never dropped', bad(JSON.stringify(Object.assign({}, inDoc, { design: Object.assign({}, inDoc.design, { e: { value: 3, unit: 'bar' } }) }))) && bad(JSON.stringify(Object.assign({}, inDoc, { design: Object.assign({}, inDoc.design, { e: { value: 3, unit: 'furlong' } }) }))));
+    const v2 = P.parse(JSON.stringify({ schema: 'gerotor-project/2', metadata: { projectName: 'o' }, design: Object.assign({}, raw, { faceSupport: 'single', doubleFill: false }), operatingPoints: [{ name: 'a', rpm: 900, dp: 30, note: 'oilT=55; pIn=0.7' }] }), raw);
+    check(S, 'schema /2 note "oilT=..; pIn=.." is migrated to fields; derived faceSupport is dropped', v2.loadCases[0].oilT === 55 && v2.loadCases[0].pIn === 0.7 && !('faceSupport' in v2.design) && !('note' in P.toDoc(v2).operatingPoints[0]));
+    const nuSt = P.parse(JSON.stringify({ schema: 'gerotor-project/3', metadata: {}, design: raw, operatingPoints: [{ name: 'a', rpm: 900, dp: 30, nu: 42 }] }), raw);
+    check(S, 'op-point nu is kept and written back', nuSt.loadCases[0].nu === 42 && P.toDoc(nuSt).operatingPoints[0].nu === 42);
+    // status: worst over all load cases, stamp, methods.
+    const mkRes = out.res;
+    const sCase = G.report.status(mkRes, { caseResults: [{ name: 'ok', status: 'VALID' }, { name: 'bad', status: 'INVALID', error: 'x' }] });
+    check(S, 'R-R2: one INVALID load case makes the status INVALID and every case is listed', sCase.valid === false && sCase.cases.length === 3 && sCase.cases.some(c => c.name === 'bad' && c.status === 'INVALID') && sCase.reasons.some(r => r.includes('bad')));
+    const savedGit = P.VERSION.gitHash, savedCore = P.VERSION.core;
+    P.stamp(null);
+    const hUn = G.report.build(st, out.params, out.res, hash, { date: '2026-10-30' });
+    check(S, 'R-R3: unstamped code version -> INVALID, NOT FOR CERTIFICATION, "NOT STAMPED"', hUn.includes('data-status="INVALID"') && hUn.includes('NOT FOR CERTIFICATION') && hUn.includes('NOT STAMPED'));
+    check(S, 'R-R3: acceptance criteria are shown as NOT EVALUATED; known issues listed with range state', hUn.includes('data-acceptance="not-evaluated"') && hUn.includes('Acceptance criteria: NOT EVALUATED') && hUn.includes('range not defined (not evaluated)'));
+    check(S, 'P.stamp accepts /api/health, rejects git "unknown"', P.stamp({ status: 'ok', git: 'abc1234', gerotor_core: '0.1.0', api: '0.2.0' }) === true && P.VERSION.gitHash === 'abc1234' && P.stamp({ status: 'ok', git: 'unknown', gerotor_core: '0.1.0' }) === false && P.VERSION.gitHash === null);
+    P.stamp({ status: 'ok', git: 'abc1234', gerotor_core: '0.1.0', api: '0.2.0' });
+    const hSt = G.report.build(st, out.params, out.res, hash, { date: '2026-10-30' });
+    const md = P.methodsData();
+    check(S, 'R-R3: stamped + methods registry present -> not INVALID by version; git hash printed', !!md && hSt.includes('abc1234') && !hSt.includes('NOT STAMPED') && hSt.includes('data-status="' + G.report.status(out.res, { params: out.params, release: true }).text + '"'));
+    check(S, 'R-R1: report assumptions and methods come from the backend registry (IDs, texts, active variant, kind-tagged sources); no invented A-D1/A-D9', !!md && md.assumptions.every(a => hSt.includes('data-id="' + a.id + '"') && hSt.includes(G.report.esc(a.text))) && md.methods.every(m => hSt.includes('data-method="' + m.id + '"')) && !hSt.includes('data-id="A-D1"') && !hSt.includes('data-id="A-D9"') && /\[literature\]/.test(hSt) && hSt.includes('cavHead = &quot;inlet&quot; (default)'));
+    P.VERSION.gitHash = savedGit; P.VERSION.core = savedCore;    const badRaw = Object.assign({}, raw, { R: 10 });          // R < N·e: trochoid forms loops
+    const badOut = G.Calc.run(badRaw);
+    const badHtml = G.report.build(P.create(badRaw), badOut.params, badOut.res, 'ab'.repeat(32), {});
+    check(S, 'report of an invalid design carries the INVALID banner and does not throw', G.report.status(badOut.res).valid === false && badHtml.includes('data-status="INVALID"') && badHtml.includes('INVALID'));
+  }
+
   function runAll() {
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica, suiteDrawingStep]) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica, suiteDrawingStep, suiteProject]) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };

@@ -111,7 +111,9 @@
     const raw = readForm();
     if (Object.values(raw).some(v => typeof v === 'number' && !Number.isFinite(v))) return;
     store(raw);
-    params = G.derive(raw);
+    const t0 = performance.now();
+    const out = G.Calc.run(raw);
+    params = out.params;
     form.elements.Rv.disabled = raw.RvAuto;
     form.elements.RvClear.disabled = !raw.RvAuto;
     if (raw.RvAuto) form.elements.Rv.value = params.Rv.toFixed(3);
@@ -120,14 +122,20 @@
     if (raw.portRoAuto) form.elements.portRo.value = params.portRo.toFixed(3);
     if (raw.portRiAuto) form.elements.portRi.value = params.portRi.toFixed(3);
 
-    res = G.analyse(params);
+    res = out.res;
+    calcMs = performance.now() - t0;
     const drawable = res.A !== undefined;
     if (drawable) renderer.setModel(params, res);
     updateMetrics();
     updateChecks();
     drawCharts();
     drawView();
+    emit('compute');
   }
+
+  let calcMs = 0;
+  const listeners = [];
+  function emit(ev) { for (const fn of listeners) { try { fn(ev, { params, res, calcMs }); } catch (e) { console.error(e); } } }
 
   function f(x, d) { return Number.isFinite(x) ? x.toFixed(d) : '—'; }
 
@@ -202,10 +210,9 @@
     for (const [gi, title] of METRIC_GROUPS.entries()) {
       const grp = rows.filter(r => r.g === gi);
       if (!grp.length) continue;
-      html += `<dt class="grp" data-steps="5">${title}</dt>`;
+      html += `<dt class="grp">${title}</dt>`;
       html += grp.map(({ k, v, big }) => {
-        const s = metricSteps(k);
-        return `<dt data-steps="${s}">${k}</dt><dd data-steps="${s}"${big ? ' class="big"' : ''}>${v}</dd>`;
+        return `<dt>${k}</dt><dd${big ? ' class="big"' : ''}>${v}</dd>`;
       }).join('');
     }
     $('metrics').innerHTML = html;
@@ -253,10 +260,6 @@
     [/^(Tooth-pass|Ripple harmonics)/, '4 5', 1],
   ];
   const METRIC_GROUPS = ['Geometry & kinematics', 'Ports, flow & pressure', 'Leakage', 'Loads, contact & efficiency', 'Other'];
-  function metricSteps(label) {
-    for (const [re, s] of STEP_OF) if (re.test(label)) return s;
-    return '1 2 3 4 5';
-  }
   function metricGroup(label) {
     for (const [re, , g] of STEP_OF) if (re.test(label)) return g;
     return 4;
@@ -275,7 +278,6 @@
       ['Checks', ok ? (nErr ? `${nErr} error${nErr > 1 ? 's' : ''}` : nWarn ? `${nWarn} warning${nWarn > 1 ? 's' : ''}` : 'all OK') : 'invalid', '', nErr ? 'err' : nWarn ? 'warn' : '', 'checks'],
     ];
     $('kpis').innerHTML = k.map(([n, v, u, cls, id]) => `<div class="kpi ${cls || ''}"${id ? ` data-kpi="${id}" title="Show the checks"` : ''}><div class="k">${n}</div><div class="v">${v}${u ? `<small>${u}</small>` : ''}</div></div>`).join('');
-    if (!$('checksPop').hidden) fillChecksPop();
     // Design summary (Outputs step).
     $('summary').innerHTML = [
       ['Lobes / teeth', `${p.N} / ${p.N - 1}`], ['e / R / rp / c', `${f(p.e, 3)} / ${f(p.R, 3)} / ${f(p.rp, 3)} / ${f(p.c, 3)} mm`],
@@ -285,34 +287,6 @@
       ['Ports', p.portsOn ? [p.dblIn ? 'in ×2' : 'in ×1', p.dblOut ? 'out ×2' : 'out ×1', p.shadow ? 'shadow' : ''].filter(Boolean).join(', ') : 'off'],
     ].map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
   }
-
-  // ------------------------------------------------------------- wizard steps
-  const STEP_INTRO = {
-    1: 'Rotor geometry: lobes, eccentricity, lobe radius and clearance, outer rotor body. Design Assist (top right) finds a geometry from a flow target.',
-    2: 'Port plate: port radii, timing, grooves, corner radii and porting type; operating point for the chamber pressure model.',
-    3: 'Fluid: oil from the library or your datasheet (ASTM D341), temperature, and the internal leakage gaps.',
-    4: 'Performance: friction and materials; efficiencies, contact stress and shaft loads at the operating point.',
-    5: 'Results: all results of the design at the operating point, the chamber charts, the checks, and the speed × pressure charts ("Create charts", Excel export).',
-    6: 'Outputs: drawings (PDF), CAD (STEP AP242, DXF, SVG), point data, the OpenModelica system model and the case table.',
-  };
-  const LAST_STEP = 6;
-  let step = 1;
-  function setStep(n) {
-    step = Math.min(LAST_STEP, Math.max(1, n));
-    document.body.dataset.step = String(step);
-    document.querySelectorAll('#steps button').forEach(b => {
-      const s = +b.dataset.go;
-      b.classList.toggle('active', s === step);
-      b.classList.toggle('done', s < step);
-    });
-    $('stepIntro').textContent = STEP_INTRO[step];
-    $('stepBack').disabled = step === 1;
-    $('stepNext').textContent = step === LAST_STEP ? 'Back to geometry' : 'Next →';
-    try { localStorage.setItem('gerotor.step', String(step)); } catch (_) { /* storage unavailable */ }
-    // Canvases that were hidden have no size yet: redraw after layout.
-    requestAnimationFrame(() => { drawCharts(); if (lastOil) drawOilCurve(lastOil.oil, lastOil.T); });
-  }
-  document.querySelectorAll('#steps button').forEach(b => b.addEventListener('click', () => setStep(+b.dataset.go)));
 
   function updateChecks() {
     const order = { err: 0, warn: 1, info: 2, ok: 3 };
@@ -444,29 +418,6 @@
     requestAnimationFrame(() => { pending = false; recompute(); });
   });
 
-  $('resetBtn').addEventListener('click', () => {
-    writeForm(DEFAULTS); renderer.fitted = false; recompute();
-  });
-
-  $('saveBtn').addEventListener('click', () => {
-    G.exporters.download('gerotor.json', JSON.stringify(readForm(), null, 2) + '\n', 'application/json');
-  });
-
-  $('loadInput').addEventListener('change', ev => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    file.text().then(txt => {
-      try {
-        writeForm(Object.assign({}, DEFAULTS, migrate(JSON.parse(txt))));
-        renderer.fitted = false;
-        recompute();
-      } catch (err) {
-        alert('Could not read JSON: ' + err.message);
-      }
-      ev.target.value = '';
-    });
-  });
-
   $('playBtn').addEventListener('click', () => {
     playing = !playing;
     $('playBtn').textContent = playing ? '❚❚' : '▶';
@@ -506,23 +457,14 @@
     G.exporters.download(`gerotor_N${params.N}_${scope}.step`, G.step.stepFile(params, res, { scope }), 'model/step');
   });
 
-  $('themeToggle').addEventListener('click', () => {
-    const root = document.documentElement;
-    const dark = root.dataset.theme
-      ? root.dataset.theme === 'dark'
-      : matchMedia('(prefers-color-scheme: dark)').matches;
-    root.dataset.theme = dark ? 'light' : 'dark';
-    try { localStorage.setItem('gerotor.theme', root.dataset.theme); } catch (_) { /* ignore */ }
-    drawCharts(); drawView();
-  });
-  try {
-    const th = localStorage.getItem('gerotor.theme');
-    if (th) document.documentElement.dataset.theme = th;
-  } catch (_) { /* ignore */ }
-
   // Hook for other panels (Design Assist): load a set of parameters into the form.
   G.app = {
-    getState() { return { params, res }; },
+    getState() { return { params, res, calcMs }; },
+    DEFAULTS, readForm, writeForm, migrate, recompute, form,
+    onChange(fn) { listeners.push(fn); },
+    redraw() { renderer.resize(); if (!renderer.fitted) renderer.fit(); drawCharts(); if (lastOil) drawOilCurve(lastOil.oil, lastOil.T); drawView(); },
+    reset() { writeForm(DEFAULTS); renderer.fitted = false; recompute(); },
+    setDesign(d) { writeForm(Object.assign({}, DEFAULTS, migrate(Object.assign({}, d)))); renderer.fitted = false; recompute(); },
     renderer,
     applyDesign(values) {
       writeForm(Object.assign(readForm(), values));
@@ -552,30 +494,9 @@
   })();
 
   $('checksAll').addEventListener('click', () => { $('checks').classList.toggle('showall'); updateChecks(); });
-
-  // Checks KPI → popover with the warnings / errors.
-  function fillChecksPop() {
-    const order = { err: 0, warn: 1, info: 2, ok: 3 };
-    const items = res && res.checks ? res.checks.filter(c => c.level !== 'ok').sort((a, b) => order[a.level] - order[b.level]) : [];
-    $('checksPop').innerHTML = `<h3>Checks to review (${items.length})</h3>` + (items.length
-      ? `<ul class="checks showall">${items.map(c => `<li class="${c.level}"><b>${c.title}</b><span>${c.detail}</span></li>`).join('')}</ul>`
-      : '<p class="note">All checks passed.</p>');
-  }
-  $('kpis').addEventListener('click', ev => {
-    if (!ev.target.closest('[data-kpi="checks"]')) return;
-    ev.stopPropagation();
-    const pop = $('checksPop');
-    pop.hidden = !pop.hidden;
-    if (!pop.hidden) fillChecksPop();
-  });
-  document.addEventListener('click', ev => { if (!ev.target.closest('#checksPop')) $('checksPop').hidden = true; });
-  $('stepBack').addEventListener('click', () => setStep(step - 1));
-  $('stepNext').addEventListener('click', () => setStep(step === LAST_STEP ? 1 : step + 1));
+  $('kpis').addEventListener('click', ev => { if (ev.target.closest('[data-kpi="checks"]') && G.workspace) G.workspace.showDock('checks'); });
 
   writeForm(restore());
   recompute();
-  let savedStep = 1;
-  try { savedStep = +localStorage.getItem('gerotor.step') || 1; } catch (_) { /* storage unavailable */ }
-  setStep(savedStep);
   requestAnimationFrame(tick);
 })(window.Gerotor);

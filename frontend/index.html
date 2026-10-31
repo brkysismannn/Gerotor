@@ -1,27 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gerotor Design Tool</title>
+  <title>Gerotor Workspace</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/workspace.css">
 </head>
-<body>
-  <header class="topbar">
-    <h1>Gerotor Design Tool</h1>
-    <span class="subtitle">Classic gerotor · trochoidal profile</span>
-    <nav class="steps" id="steps" aria-label="Design steps">
-      <button type="button" data-go="1"><b>1</b>Geometry</button>
-      <button type="button" data-go="2"><b>2</b>Ports</button>
-      <button type="button" data-go="3"><b>3</b>Fluid</button>
-      <button type="button" data-go="4"><b>4</b>Performance</button>
-      <button type="button" data-go="5"><b>5</b>Results</button>
-      <button type="button" data-go="6"><b>6</b>Outputs</button>
-      <span class="help" id="stepHelp" tabindex="0" aria-label="About this step">?<span class="tip" id="stepIntro"></span></span>
-    </nav>
-    <button id="assistOpen" class="primary topbtn" type="button">Design Assist</button>
-    <button id="themeToggle" class="ghost" type="button" title="Toggle theme">◐</button>
-  </header>
+<body data-step="geometry">
+  <div id="menubar" class="menubar" role="menubar"></div>
+  <div id="toolbar" class="toolbar" role="toolbar"></div>
+  <button id="assistOpen" type="button" hidden>Design Assist</button>
 
   <dialog id="assistDlg">
     <div class="dlg-head">
@@ -49,7 +38,7 @@
             <label>Rotor width <span class="unit">mm</span><input name="b" type="number" min="0.1" step="1" value="10"></label>
             <label>Max outer Ø <span class="unit">mm</span><input name="ODmax" type="number" min="0" step="1" value="95"></label>
             <label>Shaft / bore Ø <span class="unit">mm</span><input name="bore" type="number" min="0" step="1" value="22"></label>
-            <label>Tip clearance <span class="unit">mm</span><input name="clearance" type="number" min="0" step="0.01" value="0.02"></label>
+            <label>Profile clearance c (peak gap ≈ 2c) <span class="unit">mm</span><input name="clearance" type="number" min="0" step="0.01" value="0.02"></label>
             <label>Min wall, outer <span class="unit">mm</span><input name="wallOut" type="number" min="0" step="0.5" value="5"></label>
             <label>Min wall, inner <span class="unit">mm</span><input name="wallIn" type="number" min="0" step="0.5" value="5"></label>
           </div>
@@ -89,10 +78,18 @@
     </div>
   </dialog>
 
-  <main class="layout">
-    <aside class="panel params">
-      <form id="params" autocomplete="off">
-        <fieldset data-steps="1">
+  <div class="work" id="work">
+    <aside class="dock tree-dock" id="treeDock" aria-label="Project tree">
+      <div class="dock-h">Project</div>
+      <ul class="tree" id="tree" role="tree"></ul>
+    </aside>
+
+    <section class="centre" id="centre">
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="tab-intro" id="stepIntro"></div>
+      <div class="centre-body">
+      <form id="params" class="params" autocomplete="off" novalidate>
+                <fieldset data-steps="geometry">
           <legend>Geometry</legend>
           <label>Outer rotor lobes <i>N</i>
             <input name="N" type="number" min="3" max="30" step="1" value="7"></label>
@@ -102,7 +99,7 @@
             <input name="R" type="number" min="0.1" step="0.5" value="30"></label>
           <label>Lobe radius <i>r<sub>p</sub></i> <span class="unit">mm</span>
             <input name="rp" type="number" min="0.1" step="0.1" value="8"></label>
-          <label>Inner profile clearance <i>c</i> <span class="unit">mm</span>
+          <label>Profile equidistance clearance <i>c</i> <span class="unit">mm</span> <em class="sub">(peak tip gap ≈ 2c)</em>
             <input name="c" type="number" min="0" step="0.01" value="0.03"></label>
           <label class="with-check">Outer valley radius <i>R<sub>v</sub></i> <span class="unit">mm</span>
             <span class="row">
@@ -114,7 +111,7 @@
           <label>Outer rotor fillet radius <span class="unit">mm</span>
             <input name="fillet" type="number" min="0" step="0.1" value="0"></label>
         </fieldset>
-        <fieldset data-steps="1">
+        <fieldset data-steps="geometry">
           <legend>Body</legend>
           <label>Rotor width <i>b</i> <span class="unit">mm</span>
             <input name="b" type="number" min="0.1" step="1" value="20"></label>
@@ -123,14 +120,14 @@
           <label>Inner rotor bore <span class="unit">mm</span>
             <input name="bore" type="number" min="0" step="1" value="18"></label>
         </fieldset>
-        <fieldset data-steps="2 4">
+        <fieldset data-steps="fluid">
           <legend>Operating point</legend>
           <label>Shaft speed <span class="unit">rpm</span>
             <input name="rpm" type="number" min="0" step="50" value="1500"></label>
           <label>Pressure rise Δp <span class="unit">bar</span>
             <input name="dp" type="number" min="0" step="5" value="100"></label>
         </fieldset>
-        <fieldset data-steps="4">
+        <fieldset data-steps="contact">
           <legend>Material</legend>
           <div class="grid2">
             <label>Inner E <span class="unit">GPa</span>
@@ -143,7 +140,7 @@
               <input name="nuOut" type="number" min="0" max="0.5" step="0.01" value="0.3"></label>
           </div>
         </fieldset>
-        <fieldset data-steps="2">
+        <fieldset data-steps="ports">
           <legend>Ports</legend>
           <label class="inline"><input name="portsOn" type="checkbox" checked> Enable port model</label>
           <label class="with-check">Outer port radius <span class="unit">mm</span>
@@ -193,7 +190,7 @@
           <label class="inline"><input name="dblOut" type="checkbox"> Double-sided outlet port</label>
           <label class="inline"><input name="shadow" type="checkbox" checked> Shadow ports</label>
         </fieldset>
-        <fieldset data-steps="3">
+        <fieldset data-steps="fluid">
           <legend>Fluid</legend>
           <div class="grid2">
             <label>Oil
@@ -234,7 +231,7 @@
             <p class="note" id="oilNote"></p>
           </div>
         </fieldset>
-        <fieldset data-steps="3">
+        <fieldset data-steps="leakage">
           <legend>Leakage</legend>
           <label class="inline"><input name="leakOn" type="checkbox" checked> Model internal leakage</label>
           <p class="note">Tip/flank gaps follow from the inner profile clearance <i>c</i>. Axial clearance is the total over both faces.</p>
@@ -246,87 +243,69 @@
           </div>
           <label class="inline"><input name="shaftVent" type="checkbox" checked> Shaft bore vented to inlet</label>
         </fieldset>
-        <fieldset data-steps="4">
+        <fieldset data-steps="friction">
           <legend>Friction</legend>
           <p class="note">Viscous losses (Totaro et al. 2025); full-film lubrication assumed.</p>
           <div class="grid2">
-            <label>OD clearance (diam.) <span class="unit">mm</span>
+            <label>OD clearance, diametral <span class="unit">mm</span>
               <input name="odClr" type="number" min="0" step="0.01" value="0.15"></label>
             <label>Shaft bearing length <span class="unit">mm</span>
               <input name="jbLen" type="number" min="0" step="1" value="0"></label>
-            <label>Bearing clearance (diam.) <span class="unit">mm</span>
+            <label>Bearing clearance, diametral <span class="unit">mm</span>
               <input name="jbClr" type="number" min="0" step="0.005" value="0.04"></label>
             <label>Floor friction μ (one-sided ports)
               <input name="faceMu" type="number" min="0" step="0.01" value="0.08"></label>
           </div>
         </fieldset>
-        <fieldset data-steps="6">
+        <fieldset data-steps="outputs">
           <legend>Design summary</legend>
           <dl class="metrics small" id="summary"></dl>
         </fieldset>
-        <div class="step-nav">
-          <button type="button" id="stepBack" class="ghost">← Back</button>
-          <button type="button" id="stepNext" class="primary">Next →</button>
-        </div>
-        <div class="btn-row">
-          <button type="button" id="resetBtn" class="ghost">Defaults</button>
-          <button type="button" id="saveBtn" class="ghost">Save JSON</button>
-          <label class="ghost file-btn">Load JSON<input id="loadInput" type="file" accept=".json,application/json"></label>
-        </div>
       </form>
-    </aside>
-
-    <section class="stage">
-      <div class="canvas-wrap">
-        <canvas id="view"></canvas>
-        <div class="legend">
-          <span><i class="sw suction"></i>Suction (expanding)</span>
-          <span><i class="sw discharge"></i>Delivery (shrinking)</span>
-          <span><i class="sw trapped"></i>Sealed</span>
-          <span><i class="sw contact"></i>Contact</span>
+      <form id="metaForm" class="params" data-steps="project" autocomplete="off">
+        <fieldset>
+          <legend>Identification</legend>
+          <label data-tip="Project name shown in the title bar and on the report cover">Project <input name="project" type="text"></label>
+          <label data-tip="Part number of the pump / rotor set">Part no. <input name="partNo" type="text"></label>
+          <label data-tip="Revision label of this calculation">Revision <input name="revision" type="text"></label>
+          <label data-tip="Engineer who made the calculation">Author <input name="author" type="text"></label>
+          <label data-tip="Engineer who checked the calculation">Checker <input name="checker" type="text"></label>
+          <label data-tip="Approver for release">Approver <input name="approver" type="text"></label>
+          <label data-tip="Calculation date">Date <input name="date" type="date"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Scope and notes</legend>
+          <label data-tip="Formal scope statement printed in the report: what is analysed, which load cases and limits apply, what is excluded">Scope statement</label>
+          <textarea name="scope" rows="3" placeholder="What is analysed, which load cases and limits apply, what is excluded"></textarea>
+          <label>Notes</label>
+          <textarea name="notes" rows="4" placeholder="Assumptions, boundary conditions, open points"></textarea>
+        </fieldset>
+        <fieldset>
+          <legend>Revision history</legend>
+          <div class="grid2">
+            <label>Rev <input name="revNew" type="text"></label>
+            <label>Change <input name="revNote" type="text"></label>
+          </div>
+          <div class="btn-row"><button type="button" id="revAdd">Add history entry</button></div>
+          <ul class="revlist" id="revList"></ul>
+        </fieldset>
+        <fieldset>
+          <legend>Calculation engine</legend>
+          <label data-tip="js: runs in the browser. api: FastAPI backend (not connected yet). parity: runs both and compares.">Mode
+            <select name="calcMode"><option value="js">JavaScript (in browser)</option><option value="api" disabled>Python API (not available)</option><option value="parity" disabled>Parity JS vs API (not available)</option></select></label>
+        </fieldset>
+      </form>
+      <section data-steps="cases" id="casesSec">
+        <p class="note">Load cases are operating points. The active case (selected row) drives the input forms, charts and report; "Calculate all" evaluates every case.</p>
+        <table class="grid-table" id="caseList"></table>
+        <div class="btn-row">
+          <button type="button" id="caseAdd">Add</button>
+          <button type="button" id="caseDup">Duplicate</button>
+          <button type="button" id="caseDel">Delete</button>
+          <button type="button" id="caseRun" class="primary">Calculate all</button>
         </div>
-        <div class="hint">Wheel: zoom · Drag: pan · Double-click: fit</div>
-      </div>
-      <div class="controls">
-        <button id="playBtn" type="button" class="primary" title="Play / pause">❚❚</button>
-        <label class="grow">Inner shaft angle <output id="angleOut">0°</output>
-          <input id="angle" type="range" min="0" max="360" step="0.5" value="0"></label>
-        <label>Speed <output id="speedOut">30°/s</output>
-          <input id="speed" type="range" min="2" max="180" step="1" value="30"></label>
-        <div class="toggles">
-          <label><input type="checkbox" id="optChambers" checked> Chambers</label>
-          <label><input type="checkbox" id="optPorts" checked> Ports</label>
-          <label><input type="checkbox" id="optContacts" checked> Contacts</label>
-          <label><input type="checkbox" id="optPitch"> Pitch circles</label>
-          <label><input type="checkbox" id="optTrochoid"> Trochoid</label>
-        </div>
-      </div>
-      <div class="stage-charts" id="stageCharts">
-        <section data-steps="1 5" class="stage-chart">
-          <h2>Chamber area <small>mm² · housing angle</small></h2>
-          <canvas class="chart" id="areaChart"></canvas>
-          <div class="chart-legend" id="areaLegend"></div>
-        </section>
-        <section data-steps="2 3 5" class="stage-chart">
-          <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
-          <canvas class="chart" id="pressureChart"></canvas>
-        </section>
-        <section data-steps="2 3 4 5" class="stage-chart">
-          <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
-          <canvas class="chart" id="flowChart"></canvas>
-          <div class="chart-legend" id="flowLegend"></div>
-        </section>
-      </div>
-    </section>
-
-    <aside class="panel results">
-      <div class="kpis" id="kpis"></div>
-      <div class="popover" id="checksPop" hidden></div>
-      <section data-steps="1 2 3 4 5" id="metricsSec">
-        <h2 id="metricsTitle">Results</h2>
-        <dl class="metrics" id="metrics"></dl>
       </section>
-      <section data-steps="5" class="result-wide">
+      <section data-steps="map" class="result-wide">
         <h2>Charts <small>pump performance range</small></h2>
         <form id="mapForm" class="params" autocomplete="off">
           <div class="grid2">
@@ -357,15 +336,7 @@
         <div class="note" id="mapStatus"></div>
         <div class="note" id="maxStatus"></div>
       </section>
-      <section data-steps="1 2 5">
-        <h2>Dimensions</h2>
-        <dl class="metrics small" id="dims"></dl>
-      </section>
-      <section data-steps="1 2 3 4 5" id="checksSec">
-        <h2>Checks <small id="checksCount"></small> <button type="button" class="linkbtn" id="checksAll">Show passed</button></h2>
-        <ul class="checks" id="checks"></ul>
-      </section>
-      <section data-steps="6">
+      <section data-steps="outputs">
         <h2>Export</h2>
         <div class="export">
           <select id="exportScope">
@@ -383,7 +354,7 @@
           <button type="button" id="stepBtn">STEP AP242</button>
         </div>
       </section>
-      <section data-steps="6">
+      <section data-steps="outputs">
         <h2>OpenModelica <small>system model</small></h2>
         <p class="note">Builds a Modelica package (gerotor, outlet volume, load restriction, tanks, speed source) from the
           current design and the case table of the Charts range, then opens it in OMEdit (local server needed).</p>
@@ -394,8 +365,96 @@
         </div>
         <div class="note" id="omStatus"></div>
       </section>
-    </aside>
-  </main>
+      </div>
+    </section>
+
+    <section class="dock right-dock" id="rightDock">
+      <div class="tabs" id="dockTabs">
+        <button type="button" data-dock="rotor" class="active">Rotor view</button>
+        <button type="button" data-dock="results">Results</button>
+        <button type="button" data-dock="checks">Checks</button>
+      </div>
+      <div class="dock-pane stage" data-pane="rotor">
+        <div class="canvas-wrap">
+          <canvas id="view"></canvas>
+          <div class="legend">
+            <span><i class="sw suction"></i>Suction</span>
+            <span><i class="sw discharge"></i>Delivery</span>
+            <span><i class="sw trapped"></i>Sealed</span>
+            <span><i class="sw contact"></i>Contact</span>
+          </div>
+          <div class="hint">Wheel: zoom - Drag: pan - Double-click: fit</div>
+        </div>
+        <div class="controls">
+          <button id="playBtn" type="button" class="primary" title="Play / pause">❚❚</button>
+          <label class="grow">Inner shaft angle <output id="angleOut">0°</output>
+            <input id="angle" type="range" min="0" max="360" step="0.5" value="0"></label>
+          <label>Speed <output id="speedOut">30°/s</output>
+            <input id="speed" type="range" min="2" max="180" step="1" value="30"></label>
+          <div class="toggles">
+            <label><input type="checkbox" id="optChambers" checked> Chambers</label>
+            <label><input type="checkbox" id="optPorts" checked> Ports</label>
+            <label><input type="checkbox" id="optContacts" checked> Contacts</label>
+            <label><input type="checkbox" id="optPitch"> Pitch circles</label>
+            <label><input type="checkbox" id="optTrochoid"> Trochoid</label>
+          </div>
+        </div>
+        <div class="stage-charts" id="stageCharts">
+          <section class="stage-chart">
+            <h2>Chamber area <small>mm² · housing angle</small></h2>
+            <canvas class="chart" id="areaChart"></canvas>
+            <div class="chart-legend" id="areaLegend"></div>
+          </section>
+          <section class="stage-chart">
+            <h2>Chamber pressure <small>bar abs · housing angle</small></h2>
+            <canvas class="chart" id="pressureChart"></canvas>
+          </section>
+          <section class="stage-chart">
+            <h2>Delivery flow <small>/ theoretical mean · inner shaft angle</small></h2>
+            <canvas class="chart" id="flowChart"></canvas>
+            <div class="chart-legend" id="flowLegend"></div>
+          </section>
+        </div>
+      </div>
+      <div class="dock-pane results" data-pane="results" hidden>
+        <div class="kpis" id="kpis"></div>
+        <section id="metricsSec"><h2 id="metricsTitle">Results <small>active load case</small></h2><dl class="metrics" id="metrics"></dl></section>
+        <section><h2>Dimensions</h2><dl class="metrics small" id="dims"></dl></section>
+      </div>
+      <div class="dock-pane results" data-pane="checks" hidden>
+        <section id="checksSec">
+          <h2>Checks <small id="checksCount"></small> <button type="button" class="linkbtn" id="checksAll">Show passed</button></h2>
+          <ul class="checks" id="checks"></ul>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <section class="bottom" id="bottom">
+    <div class="tabs" id="bottomTabs">
+      <button type="button" data-bt="grid" class="active">Results grid</button>
+      <button type="button" data-bt="cases">Load case results</button>
+      <button type="button" data-bt="msgs">Messages <span class="badge" id="msgBadge">0</span></button>
+      <span class="spacer"></span>
+      <button type="button" class="ghost" id="bottomHide" title="Hide panel">▾</button>
+    </div>
+    <div class="bt-pane" data-btp="grid"><table class="grid-table" id="resGrid"></table></div>
+    <div class="bt-pane" data-btp="cases" hidden><table class="grid-table" id="caseResGrid"></table></div>
+    <div class="bt-pane" data-btp="msgs" hidden><ul class="msglist" id="msgList"></ul></div>
+  </section>
+  <footer class="status" id="status">
+    <span id="stErr" class="st-item err" title="Errors">Errors: <b>0</b></span>
+    <span id="stWarn" class="st-item warn" title="Warnings">Warnings: <b>0</b></span>
+    <span id="stMsg" class="st-item" title="Messages">Messages: <b>0</b></span>
+    <span class="sp"></span>
+    <span id="stCase" class="st-item"></span>
+    <span id="stMode" class="st-item"></span>
+    <span id="stCalc" class="st-item"></span>
+    <span id="stDirty" class="st-item"></span>
+  </footer>
+
+  <dialog id="metaDlg" class="small-dlg"><div class="dlg-head"><h2 id="metaDlgTitle"></h2><button type="button" id="metaDlgClose" aria-label="Close">✕</button></div><div class="dlg-pad" id="metaDlgBody"></div></dialog>
+  <input id="openInput" type="file" accept=".json,application/json" hidden>
 
   <dialog id="chartsDlg" class="charts-dlg">
     <div class="dlg-head">
@@ -431,9 +490,13 @@
   <script src="js/drawing.js"></script>
   <script src="js/step.js"></script>
   <script src="js/export.js"></script>
+  <script src="js/project.js"></script>
+  <script src="js/methods.generated.js"></script>
+  <script src="js/report.js"></script>
   <script src="js/app.js"></script>
   <script src="js/assist-ui.js"></script>
   <script src="js/perfmap-ui.js"></script>
   <script src="js/modelica-ui.js"></script>
+  <script src="js/workspace.js"></script>
 </body>
 </html>

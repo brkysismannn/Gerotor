@@ -1,0 +1,9 @@
+numpy>=2.0
+pytest>=8
+# only for regenerating tests/reference/*.json from the JS sources:
+mini-racer>=0.12
+# API (backend/api):
+fastapi>=0.110
+uvicorn>=0.29
+jsonschema>=4.20
+httpx>=0.27  # TestClient

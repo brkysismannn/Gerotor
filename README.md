@@ -1,7 +1,7 @@
 # Gerotor Design Tool
 
 Browser-based design tool for classic gerotors (trochoidal inner rotor + circular-arc lobed outer rotor).
-No installation: open `index.html` in a browser.
+No installation: open `frontend/index.html` in a browser.
 
 ## Features
 
@@ -102,33 +102,33 @@ sum of negative chamber-volume derivatives (Rundo 2017, Eq. 20). Displacement pe
 
 See `docs/literatur-notlari.md` for literature notes and benchmark designs.
 
-**Test suite:** open `tests/index.html` — validation & regression tests with error vs. reference for every
+**Test suite:** open `frontend/tests/index.html` — validation & regression tests with error vs. reference for every
 model (geometry, displacement, ripple, ports, pressure model, export). Results are summarised in
 `docs/validation.md`. Every new feature must add tests and keep the suite at 0 fail.
 
 ## File layout
 
 ```
-index.html        UI
-css/style.css     styles (light/dark)
-js/geometry.js    geometry and analysis core
-js/ports.js       port plate geometry, opening areas, chamber pressure model
-js/leakage.js     multi-chamber network with leakage paths
-js/backlash.js    tooth contact with clearance (backlash angle, actual tip gaps)
-js/contact.js     contact force, Hertz stress, sliding velocity, shaft torque
-js/friction.js    viscous friction losses, efficiencies
-js/perfmap.js     performance map (+ js/perfmap-ui.js)
-js/reverse.js     reverse engineering from measured diameters
-js/fluid.js       oil viscosity / density vs temperature
-js/spectrum.js    flow ripple spectrum
+frontend/index.html        UI
+frontend/css/style.css     styles (light/dark)
+frontend/js/geometry.js   geometry and analysis core
+frontend/js/ports.js      port plate geometry, opening areas, chamber pressure model
+frontend/js/leakage.js    multi-chamber network with leakage paths
+frontend/js/backlash.js   tooth contact with clearance (backlash angle, actual tip gaps)
+frontend/js/contact.js    contact force, Hertz stress, sliding velocity, shaft torque
+frontend/js/friction.js   viscous friction losses, efficiencies
+frontend/js/perfmap.js    performance map (+ js/perfmap-ui.js)
+frontend/js/reverse.js    reverse engineering from measured diameters
+frontend/js/fluid.js      oil viscosity / density vs temperature
+frontend/js/spectrum.js   flow ripple spectrum
 tools/serve.ps1   local static server (PowerShell, no dependencies)
-js/assist.js      Design Assist search
-js/assist-ui.js   Design Assist dialog
-tests/            validation & regression suite (open tests/index.html)
-js/render.js      canvas rendering
-js/charts.js      charts
-js/export.js      DXF / SVG / CSV
-js/app.js         UI wiring
+frontend/js/assist.js     Design Assist search
+frontend/js/assist-ui.js  Design Assist dialog
+frontend/tests/    validation & regression suite (open frontend/tests/index.html)
+frontend/js/render.js     canvas rendering
+frontend/js/charts.js     charts
+frontend/js/export.js     DXF / SVG / CSV
+frontend/js/app.js        UI wiring
 docs/             literature notes
 ```
 

@@ -1,14 +1,15 @@
 # Minimal static file server for local development (no Node/Python needed).
-# Usage: powershell -ExecutionPolicy Bypass -File tools/serve.ps1 -Root . -Port 8765
+# Usage: powershell -ExecutionPolicy Bypass -File tools/serve.ps1 -Port 8765   (Root defaults to <repo>/frontend)
 #
 # Also serves POST /api/modelica (used by the "Open in OpenModelica" button):
 #   body JSON { name, files: { "<file>": "<text>", ... }, open: true|false, check: true|false }
 #   → writes the files to <repo>/modelica/<name>/, optionally runs omc checkModel and starts OMEdit.
 #   Only same-origin requests with the header X-Gerotor-Request: 1 are accepted (a cross-site page
 #   cannot send that header without a CORS preflight, which this server never grants).
-param([string]$Root = ".", [int]$Port = 8765)
-$Root = (Resolve-Path $Root).Path
+param([string]$Root = "", [int]$Port = 8765)
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if (-not $Root) { $Root = Join-Path $RepoRoot 'frontend' }   # static files live in frontend/
+$Root = (Resolve-Path $Root).Path
 $types = @{ '.html'='text/html; charset=utf-8'; '.js'='text/javascript; charset=utf-8'; '.css'='text/css; charset=utf-8';
             '.json'='application/json'; '.svg'='image/svg+xml'; '.pdf'='application/pdf'; '.md'='text/markdown; charset=utf-8';
             '.mo'='text/plain; charset=utf-8'; '.mos'='text/plain; charset=utf-8'; '.csv'='text/csv; charset=utf-8' }

@@ -1,0 +1,110 @@
+{
+  "schema": "gerotor-project/3",
+  "metadata": {
+    "projectName": "Example N7 pump",
+    "partNo": "GP-0007",
+    "revision": "A",
+    "author": "Design and Simulation Engineer",
+    "checker": "",
+    "created": "2026-10-30T09:00:00Z",
+    "modified": "2026-10-30T09:00:00Z",
+    "checked": null,
+    "notes": "Reference design n7_ports_leak of the JS parity suite.",
+    "scope": "Steady-state hydraulic, kinematic and contact analysis of the N7 reference gerotor at the listed operating points; transient start-up, thermal and fatigue analysis are excluded.",
+    "revisions": [
+      {
+        "rev": "A",
+        "date": "2026-10-30",
+        "author": "Design and Simulation Engineer",
+        "description": "first issue"
+      }
+    ],
+    "signOff": {
+      "author": {
+        "name": "Design and Simulation Engineer",
+        "date": "2026-10-30"
+      },
+      "checker": {
+        "name": "",
+        "date": ""
+      },
+      "approver": {
+        "name": "",
+        "date": ""
+      }
+    }
+  },
+  "design": {
+    "N": 7,
+    "e": {
+      "value": 3,
+      "unit": "mm"
+    },
+    "R": 30,
+    "rp": 8,
+    "b": 20,
+    "c": 0.03,
+    "OD": 80,
+    "bore": 18,
+    "RvAuto": true,
+    "RvClear": 0.5,
+    "rpm": 1500,
+    "dp": 100,
+    "portsOn": true,
+    "leakOn": true,
+    "pIn": 1,
+    "Cd": 0.7,
+    "axialClr": 0.05,
+    "odClr": 0.15,
+    "jbLen": 0,
+    "jbClr": 0.04,
+    "faceMu": 0.08,
+    "simSub": 4,
+    "dblIn": false,
+    "dblOut": false,
+    "shadow": true
+  },
+  "operatingPoints": [
+    {
+      "name": "rated",
+      "rpm": 1500,
+      "dp": 100
+    },
+    {
+      "name": "low speed",
+      "rpm": 600,
+      "dp": 50,
+      "oilT": 80,
+      "pIn": 0.9
+    }
+  ],
+  "settings": {
+    "samples": 24,
+    "contactQuasiStatic": false,
+    "maxSpeed": {
+      "enabled": false
+    },
+    "variants": {
+      "cavHead": "inlet",
+      "clearanceInput": "equidistance",
+      "cavAreaDoubleFill": true,
+      "clearanceConvention": "diametral",
+      "journal": null,
+      "lambdaConvention": "ivanovic"
+    },
+    "acceptanceCriteria": {
+      "authority": null,
+      "status": "pending",
+      "criteria": []
+    }
+  },
+  "results": null,
+  "fluid": {
+    "oil": "vg46",
+    "oilT": 50,
+    "nu": 30,
+    "rho": 860,
+    "bulk": 1400,
+    "pVap": 0.2
+  }
+}

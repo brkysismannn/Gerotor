@@ -5,6 +5,11 @@ and keep the suite at **0 fail**. Status `known` marks a documented open discrep
 
 Last run: 2026-10-23 — **286 pass · 0 fail · 3 known** (289 tests, ~140 s).
 
+2026-10-30 — Python backend (`backend/`, `python -m pytest -q`): **163 pass · 0 fail · 0 xfail**, incl. JS parity
+(4 author + 15 independent designs, rel. 1e-9) and independent UI/report review tests. Frontend suite in V8
+(mini-racer): 0 new failures; 2 environment-only fails (DOMParser/TextDecoder absent in bare V8). A full run in
+a real browser after the frontend/ move and workspace UI is still pending.
+
 ## Change log of the numerical core
 
 - **2026-10-22 — exact chamber area.** Chamber area is now computed analytically (closed-form circular arcs

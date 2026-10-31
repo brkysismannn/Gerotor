@@ -3,3 +3,6 @@ modelica/
 
 # Files saved by the local server (/api/save)
 exports/
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -29,7 +29,7 @@ Ek olarak: oda alanları toplamı = boşluk alanı (%0.005); deplasman çukur ya
 ### Açık konular
 - **Antoniak Denk. (2)** kapalı formülü aynı tasarım için 0.4994 veriyor; makalenin kendi tablosu (0.493) ve bizim sayısal sonuç (0.492) daha düşük. Formülün PDF metninden aktarımı hatalı olabilir; Stryczek (1996) orijinaliyle kontrol edilmeli.
 - **Antoniak δe = %1.15** (z1=10) — bizde %2.30. Tanım farkı olabilir (Denk. 3, eliptik integral içeriyor). Stryczek orijinali gerekli.
-- **Tek/çift diş etkisi:** Nichols ve Ivanović, çift sayılı iç dişin (tek N) daha düşük dalgalanma verdiğini söylüyor. Bizim modelde tek N için frekans iki katına çıkıyor (doğru), ama genlik farkı küçük. Mancò ve ark. (2000) bunu port zamanlamasına bağlıyor; port modeli eklenince yeniden değerlendirilmeli.
+- **Tek/çift diş etkisi:** Nichols ve Ivanović, çift sayılı iç dişin (tek N) daha düşük dalgalanma verdiğini söylüyor. Bizim modelde baskın harmonik hem tek hem çift N için N (diş geçiş frekansı, f = n·N/60); tek N genliği düşürür, frekansı değiştirmez (backend testi ile doğrulandı). Mancò ve ark. (2000) bunu port zamanlamasına bağlıyor; port modeli eklenince yeniden değerlendirilmeli.
 - **Liu ve ark. (2015)** Z1=6/7/8 dalgalanmaları (%4.4 / 10.1 / 2.2) için tasarım parametreleri verilmemiş; karşılaştırılamaz.
 
 ## 3. Tasarım kısıtları (Ivanović, Tablo 1)

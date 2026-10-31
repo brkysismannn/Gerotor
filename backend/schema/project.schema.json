@@ -1,0 +1,681 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gerotor.local/schema/gerotor-project/3",
+  "title": "Gerotor project file",
+  "description": "Saved gerotor design: metadata, design inputs (fixed units, see x-unit), fluid, load cases, calculation settings and optionally stored results with the SHA-256 of the inputs they were computed from. Input hash = SHA-256 over the UTF-8 bytes of the RFC 8785 JSON Canonicalization Scheme (JCS) text of {design, fluid, operatingPoints, settings, measured} (absent/null/empty members omitted); numbers per ECMAScript Number.prototype.toString (3.0 -> 3, 1e-5 -> 0.00001, 1e21 -> 1e+21). Version 3 moves oil settings into 'fluid', adds optional oilT/pIn/nu per operating point, and makes faceSupport/doubleFill derived (from dblIn/dblOut/shadow, core rule) instead of stored. Older files are migrated automatically (api/project.py MIGRATIONS); their input hash is recomputed and changes once.",
+  "type": "object",
+  "required": [
+    "schema",
+    "metadata",
+    "design"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "gerotor-project/3"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "projectName"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "projectName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "partNo": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "checker": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "modified": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "checked": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Formal scope statement of the calculation: what is analysed, which load cases and limits apply, what is excluded."
+        },
+        "revisions": {
+          "type": "array",
+          "description": "Revision history, oldest first.",
+          "items": {
+            "type": "object",
+            "required": [
+              "rev",
+              "date",
+              "author",
+              "description"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "rev": {
+                "type": "string",
+                "minLength": 1
+              },
+              "date": {
+                "$ref": "#/$defs/date"
+              },
+              "author": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "signOff": {
+          "type": "object",
+          "description": "Sign-off block of the calculation report.",
+          "additionalProperties": false,
+          "properties": {
+            "author": {
+              "$ref": "#/$defs/signature"
+            },
+            "checker": {
+              "$ref": "#/$defs/signature"
+            },
+            "approver": {
+              "$ref": "#/$defs/signature"
+            }
+          }
+        }
+      }
+    },
+    "design": {
+      "description": "gerotor_core design keys. Values are numbers/booleans/strings in the fixed unit given by x-unit, or {value, unit} objects (unit must equal x-unit; informative). Unknown keys are passed through to gerotor_core. faceSupport and doubleFill are DERIVED (faceSupport = 'balanced' if dblOut or shadow else 'single'; doubleFill = dblIn and dblOut; gerotor_core.geometry.derive) and must not be stored. Oil keys live in 'fluid'.",
+      "type": "object",
+      "required": [
+        "N",
+        "e",
+        "R",
+        "rp",
+        "b"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "N": {
+          "$ref": "#/$defs/int",
+          "x-unit": "-",
+          "description": "outer-rotor lobe count (inner has N-1)"
+        },
+        "e": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "eccentricity"
+        },
+        "R": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "outer-lobe centre circle radius"
+        },
+        "rp": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "outer-lobe (pin) radius"
+        },
+        "b": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "rotor width"
+        },
+        "c": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "profile equidistance clearance (Ivanovic eps), see A-D3"
+        },
+        "OD": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "outer-rotor outside diameter"
+        },
+        "bore": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm"
+        },
+        "rpm": {
+          "$ref": "#/$defs/num",
+          "x-unit": "rpm"
+        },
+        "dp": {
+          "$ref": "#/$defs/num",
+          "x-unit": "bar"
+        },
+        "pIn": {
+          "$ref": "#/$defs/num",
+          "x-unit": "bar(a)"
+        },
+        "Cd": {
+          "$ref": "#/$defs/num",
+          "x-unit": "-"
+        },
+        "axialClr": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm"
+        },
+        "odClr": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "diametral (A-D5)"
+        },
+        "jbClr": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "diametral (A-D5)"
+        },
+        "jbLen": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm"
+        },
+        "faceMu": {
+          "$ref": "#/$defs/num",
+          "x-unit": "-"
+        },
+        "portsOn": {
+          "type": "boolean"
+        },
+        "leakOn": {
+          "type": "boolean"
+        },
+        "RvAuto": {
+          "type": "boolean"
+        },
+        "RvClear": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm"
+        },
+        "dblIn": {
+          "type": "boolean",
+          "description": "double-sided (mirrored) inlet port -> fillS = 2"
+        },
+        "dblOut": {
+          "type": "boolean",
+          "description": "double-sided outlet port -> fillD = 2"
+        },
+        "shadow": {
+          "type": "boolean",
+          "description": "shadow (balancing) pockets on the port-free face"
+        }
+      },
+      "allOf": [
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "faceSupport"
+                ]
+              },
+              {
+                "required": [
+                  "doubleFill"
+                ]
+              },
+              {
+                "required": [
+                  "nu"
+                ]
+              },
+              {
+                "required": [
+                  "rho"
+                ]
+              },
+              {
+                "required": [
+                  "bulk"
+                ]
+              },
+              {
+                "required": [
+                  "pVap"
+                ]
+              },
+              {
+                "required": [
+                  "oil"
+                ]
+              },
+              {
+                "required": [
+                  "oilT"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "fluid": {
+      "type": "object",
+      "description": "Oil / fluid settings (moved out of design in /3). oil = gerotor_core.fluid.OILS key, 'user' (datasheet points uT1/uNu1, uT2/uNu2, uT3/uNu3, uRho15) or free text. nu/rho are the values at oilT used by the calculation.",
+      "additionalProperties": false,
+      "properties": {
+        "oil": {
+          "type": "string"
+        },
+        "oilT": {
+          "$ref": "#/$defs/num",
+          "x-unit": "degC"
+        },
+        "nu": {
+          "$ref": "#/$defs/num",
+          "x-unit": "cSt",
+          "description": "kinematic viscosity at oilT"
+        },
+        "rho": {
+          "$ref": "#/$defs/num",
+          "x-unit": "kg/m^3"
+        },
+        "bulk": {
+          "$ref": "#/$defs/num",
+          "x-unit": "MPa"
+        },
+        "pVap": {
+          "$ref": "#/$defs/num",
+          "x-unit": "bar(a)"
+        },
+        "uT1": {
+          "$ref": "#/$defs/num",
+          "x-unit": "degC"
+        },
+        "uT2": {
+          "$ref": "#/$defs/num",
+          "x-unit": "degC"
+        },
+        "uT3": {
+          "$ref": "#/$defs/num",
+          "x-unit": "degC"
+        },
+        "uNu1": {
+          "$ref": "#/$defs/num",
+          "x-unit": "cSt"
+        },
+        "uNu2": {
+          "$ref": "#/$defs/num",
+          "x-unit": "cSt"
+        },
+        "uNu3": {
+          "$ref": "#/$defs/num",
+          "x-unit": "cSt"
+        },
+        "uRho15": {
+          "$ref": "#/$defs/num",
+          "x-unit": "kg/m^3"
+        }
+      }
+    },
+    "operatingPoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rpm",
+          "dp"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "rpm": {
+            "type": "number",
+            "minimum": 0,
+            "x-unit": "rpm"
+          },
+          "dp": {
+            "type": "number",
+            "minimum": 0,
+            "x-unit": "bar"
+          },
+          "note": {
+            "type": "string"
+          },
+          "oilT": {
+            "type": "number",
+            "x-unit": "degC",
+            "description": "oil temperature of the case; with fluid.oil a known grade or 'user', nu and rho are evaluated at oilT"
+          },
+          "pIn": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "x-unit": "bar(a)",
+            "description": "inlet pressure (absolute)"
+          },
+          "nu": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "x-unit": "cSt",
+            "description": "explicit viscosity of the case (overrides oilT lookup)"
+          }
+        }
+      }
+    },
+    "measured": {
+      "description": "optional measured diameters for reverse engineering [mm]",
+      "type": "object",
+      "properties": {
+        "N": {
+          "type": "integer"
+        },
+        "rp": {
+          "type": "number"
+        },
+        "Dt": {
+          "type": "number"
+        },
+        "Dr": {
+          "type": "number"
+        },
+        "Dl": {
+          "type": "number"
+        },
+        "Dv": {
+          "type": "number"
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "samples": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 1000,
+          "default": 96
+        },
+        "contactQuasiStatic": {
+          "type": "boolean",
+          "default": false
+        },
+        "maxSpeed": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "voidLimit": {
+              "type": "number",
+              "default": 0.005
+            },
+            "rpmMin": {
+              "type": "number",
+              "default": 100
+            },
+            "rpmMax": {
+              "type": "number",
+              "default": 20000
+            },
+            "tol": {
+              "type": "number",
+              "default": 10
+            }
+          }
+        },
+        "variants": {
+          "description": "Literature-variant switches; defaults reproduce the JS tool.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cavHead": {
+              "enum": [
+                "inlet",
+                "atm"
+              ],
+              "default": "inlet",
+              "x-id": "A-D2"
+            },
+            "clearanceInput": {
+              "enum": [
+                "equidistance",
+                "peakGap"
+              ],
+              "default": "equidistance",
+              "x-id": "A-D3"
+            },
+            "cavAreaDoubleFill": {
+              "type": "boolean",
+              "default": true,
+              "x-id": "A-D4"
+            },
+            "clearanceConvention": {
+              "enum": [
+                "diametral",
+                "radial"
+              ],
+              "default": "diametral",
+              "x-id": "A-D5"
+            },
+            "journal": {
+              "x-id": "A-D6",
+              "default": null,
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "l1",
+                    "l2",
+                    "L1",
+                    "L2"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "l1": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "l2": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "L1": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "L2": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  }
+                }
+              ]
+            },
+            "lambdaConvention": {
+              "enum": [
+                "ivanovic",
+                "gamez"
+              ],
+              "default": "ivanovic",
+              "x-id": "A-D7"
+            }
+          }
+        },
+        "acceptanceCriteria": {
+          "description": "PLACEHOLDER - acceptance / safety-factor criteria are NOT evaluated yet (pending the owner's choice of authority/standard). Stored, hashed and echoed in the report only.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "authority": null,
+            "status": "pending",
+            "criteria": []
+          },
+          "properties": {
+            "authority": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "standard / customer spec the criteria come from (to be chosen)"
+            },
+            "status": {
+              "enum": [
+                "pending"
+              ],
+              "description": "only 'pending' until criteria evaluation is implemented"
+            },
+            "criteria": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "quantity",
+                  "limit"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "string",
+                    "description": "result path, e.g. contact.pMaxPeak"
+                  },
+                  "comparison": {
+                    "enum": [
+                      "<=",
+                      ">="
+                    ]
+                  },
+                  "limit": {
+                    "type": "number"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "results": {
+      "description": "Stored results (as returned by POST /api/calc/all, arrays optional). Stale if inputHash != current hash of {design, fluid, operatingPoints, settings, measured} (JCS, see top).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "inputHash",
+        "software"
+      ],
+      "properties": {
+        "inputHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "computed": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "software": {
+          "type": "object"
+        },
+        "data": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "num": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "object",
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "int": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 3
+        },
+        {
+          "type": "object",
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": 3
+            },
+            "unit": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD or empty if not yet signed",
+      "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$"
+    },
+    "signature": {
+      "type": "object",
+      "required": [
+        "name",
+        "date"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "date": {
+          "$ref": "#/$defs/date"
+        }
+      }
+    }
+  }
+}
