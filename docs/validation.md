@@ -503,3 +503,29 @@ tolerance and grid, so the metric was removed. Needs elastic deformation (Hertz)
 Single loaded contact from the backlash model (inner rotor drives); torque reversal (negative contact force) is
 reported as a rattle/noise warning. Ivanović's load sharing over several teeth and elastic deformation are not
 modelled; their text is ambiguous on which model has the lowest WRPF.
+
+## 24. Real products (`backend/tests/test_product_validation.py`, 2026-10-31)
+
+Dataset `docs/validation-products/products.csv` (364 rows) and `performance_points.csv` (6256 points). Details and per-row tables:
+`company/reports/2026-10-31-design-sim-engineer-product-validation.md`.
+
+Geometry reconstruction (Adamjee, 36 rows): N, e, outer form (minor) diameter Dl = 2(R - rp), c = 0,
+tangent valley. rp is not given and not guessed: V is averaged over 5 points of the full valid rp
+interval (lobes reach valley, R > N e, no undercut); the spread (0.01-0.37 %) is added to the
+tolerance with the printed-digit rounding. Implied clearance c = (Dl - Dt)/2 + e = 0.03-0.07 mm
+for 11 of 12 parts (3/4 part has truncated "flat to tip" tips).
+
+| Test | Result |
+|---|---|
+| Vendor claim D = 0.95 x theoretical | consistent for 2 of 36 rows (3/4 part); printed D/V mean 1.0085, range 0.954-1.063 (34 rows, 2 typos excluded) — vendor deviation, tool cross-checked by Rundo Eq. 20 |
+| Adamjee per-height x height = D; flow = 1.5 D | list 1: 24/24; list 2: 4 inconsistent (2 typos: 784/785 x0.5, 814/815 7.87 vs 7.01) |
+| Pumps Q = D n (66 rows) | 59 within rounding; 7 Adamjee list-2 deviations ("l/min approximate") |
+| Motors D n_max <= Q_max (150 rows) | 123 pass; 27 vendor-internal violations (Danfoss WP up to eta 1.20) |
+| Danfoss H/S D proportional to width X (20 rows) | 19 consistent; H-040 outlier |
+| Round 2: Rexroth PGZ (OCR, 10 rows) delivered flow at 10 bar | eta_v 0.920-0.950 (all <= 1); PGZ4/PGZ5 duplicates agree |
+| Round 2: motors incl. 41 Eagle variant rows (191) | 161 pass; 30 vendor-internal violations |
+| Round 2: Eagle performance points (6256) eta_v, eta_hm, eta | medians 0.919 / 0.823 / 0.725; 23 points eta_v > 1, 6 points eta_hm > 1 (source issues) |
+| Tool leakage/friction vs Eagle points | NOT APPLIED: no profile or clearances published, none fitted; model-free trend eta_v not falling with speed at fixed dp: 98.0 % of steps |
+
+Expected deviations are listed as explicit sets in the test (a new or vanishing deviation fails).
+Not checkable: displacement of all orbit motors (no profile data), Danfoss H/S (width only), Buhler (no speed).
