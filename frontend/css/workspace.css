@@ -31,8 +31,13 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 .sp, .spacer { flex: 1; }
 
 /* ---- main work area */
-.work { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px 350px minmax(0, 1fr); gap: 1px; background: var(--border); }
-body.no-tree .work { grid-template-columns: 0 350px minmax(0, 1fr); }
+/* Columns: tree | forms | splitter | dock. Items are placed explicitly so that hiding the tree never shifts the forms
+   into a zero-width column (that was the "inputs vanish below 1100 px" bug). Widths come from --tree-w / --form-w. */
+.work { --tree-w: 190px; --form-w: 350px; flex: 1; min-height: 0; position: relative; display: grid; grid-template-columns: var(--tree-w) var(--form-w) 6px minmax(0, 1fr); gap: 0; background: var(--border); }
+.work > .tree-dock { grid-column: 1; } .work > .centre { grid-column: 2; } .work > .splitter { grid-column: 3; } .work > .right-dock { grid-column: 4; }
+.splitter { cursor: col-resize; background: var(--chrome-2); border-left: 1px solid var(--border); border-right: 1px solid var(--border); touch-action: none; }
+.splitter:hover, .splitter.drag { background: var(--accent); }
+body.no-tree .work { --tree-w: 0px; }
 body.no-tree .tree-dock { display: none; }
 .dock, .centre { background: var(--panel); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .dock-h { padding: 4px 8px; font-weight: 600; background: var(--chrome-2); border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
@@ -123,8 +128,18 @@ dialog.small-dlg::backdrop { background: rgba(0, 0, 0, .35); }
 .dlg-pad { padding: 10px 16px 16px; overflow: auto; max-height: calc(88vh - 56px); }
 kbd { font: 11px var(--font-mono); background: var(--chrome-2); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
 
-@media (max-width: 1500px) { .work { grid-template-columns: 170px 330px minmax(0, 1fr); } }
-@media (max-width: 1100px) { .work { grid-template-columns: 0 330px minmax(0, 1fr); } .tree-dock { display: none; } }
+@media (max-width: 1500px) { .work { --tree-w: 170px; } }
+/* Narrow window: the tree becomes an overlay opened by the Tree button; forms stay visible beside the dock. */
+@media (max-width: 1000px) {
+  .work { --tree-w: 0px; --form-w: min(var(--form-w-user, 330px), 55vw); }
+  .tree-dock { display: none; position: absolute; z-index: 20; left: 0; top: 0; bottom: 0; width: 230px; box-shadow: 3px 0 10px rgba(0,0,0,.25); }
+  body.tree-open .tree-dock { display: flex; }
+}
+/* Very narrow: forms on top, dock below (never hidden), no splitter. */
+@media (max-width: 820px) {
+  .work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); }
+  .work > .centre { grid-column: 1; grid-row: 1; } .work > .right-dock { grid-column: 1; grid-row: 2; } .work > .splitter { display: none; }
+}
 @media print { .menubar, .toolbar, .status, .bottom { display: none; } }
 
 /* dark theme (optional, View menu) */

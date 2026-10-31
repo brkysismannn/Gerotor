@@ -1,7 +1,9 @@
 /*
- * Project model: gerotor-project/3 files (backend/schema/project.schema.json), SHA-256 input hash over the RFC 8785 (JCS)
+ * Project model: gerotor-project/4 files (backend/schema/project.schema.json), SHA-256 input hash over the RFC 8785 (JCS)
  * canonical JSON of {design, operatingPoints, settings, measured} (same as backend/api/project.py), undo/redo history,
- * recent-project list and the Calc adapter. Reads /1, /2 (note "oilT=..; pIn=.." migrated) and /3. No DOM access here.
+ * recent-project list and the Calc adapter. Reads /1, /2 (note "oilT=..; pIn=.." migrated), /3 and /4
+ * (/3 -> /4: the placeholder settings.acceptanceCriteria is migrated by G.criteria.migrateV3, as backend _v3_to_v4). No DOM access here.
+ * metadata.designLabel marks the pre-filled default design as "Example design (not a recommendation)" (owner rule no-unexplained-numbers).
  *
  * Internal state:  { meta:{project,partNo,revision,author,checker,approver,date,notes,scope,created,checked,revisions:[{rev,date,author,description}],signOff},
  *                    design:{flat input keys}, loadCases:[{name,rpm,dp,oilT,pIn,nu?}], activeCase, calcMode, settings:{schema settings, passed through} }
@@ -14,8 +16,9 @@
   'use strict';
 
   const VERSION = { app: '0.2.0', core: 'gerotor-js 0.2.0', gitHash: null, api: null };
-  const SCHEMA = 'gerotor-project/3';
-  const SCHEMA_VERSION = 3;
+  const SCHEMA = 'gerotor-project/4';
+  const SCHEMA_VERSION = 4;
+  const EXAMPLE_LABEL = 'Example design (not a recommendation)';
   const FLUID_KEYS = ['oil', 'oilT', 'nu', 'rho', 'bulk', 'pVap', 'uT1', 'uNu1', 'uT2', 'uNu2', 'uT3', 'uNu3', 'uRho15'];
   const CASE_KEYS = ['oilT', 'pIn', 'nu'];
   const EXT = '.gerotor.json';
@@ -24,7 +27,7 @@
   const today = () => new Date().toISOString().slice(0, 10);
   function defaultMeta() {
     return { project: 'Untitled gerotor', partNo: '', revision: 'A', author: '', checker: '', approver: '',
-      date: today(), notes: '', scope: '', created: new Date().toISOString(), checked: null, revisions: [], signOff: {} };
+      date: today(), notes: '', scope: '', designLabel: EXAMPLE_LABEL, created: new Date().toISOString(), checked: null, revisions: [], signOff: {} };
   }
 
   function defaultLoadCases(design) {
@@ -112,7 +115,7 @@
       schema: SCHEMA,
       metadata: {
         projectName: m.project || 'Untitled gerotor', partNo: m.partNo || '', revision: m.revision || '', author: m.author || '', checker: m.checker || '',
-        created: m.created || iso, modified: iso, checked: m.checked || null, notes: m.notes || '', scope: m.scope || '',
+        designLabel: m.designLabel || '', created: m.created || iso, modified: iso, checked: m.checked || null, notes: m.notes || '', scope: m.scope || '',
         revisions: (m.revisions || []).map(r => ({ rev: String(r.rev || '-'), date: r.date || '', author: r.author || '', description: r.description || r.note || '' })),
         signOff: { author: so('author', m.author), checker: so('checker', m.checker), approver: so('approver', m.approver) },
         workspace: { app: 'Gerotor Workspace ' + VERSION.app, activeCase: state.activeCase, calcMode: state.calcMode || 'js', calcDate: m.date || '' },
@@ -176,7 +179,16 @@
     return convertUnit(v.value, v.unit, target, `${where}.${key}`);
   }
 
-  // Accepts gerotor-project/1|2 files or a legacy bare parameter JSON; throws Error with a readable message.
+  // settings.acceptanceCriteria (schema /4): every override needs reason, user and timestamp (schema "required").
+  function checkCriteria(ac) {
+    if (ac === undefined || ac === null) return;
+    if (typeof ac !== 'object' || Array.isArray(ac)) throw new Error('settings.acceptanceCriteria must be an object');
+    (ac.overrides || []).forEach((o, i) => {
+      for (const k of ['id', 'field', 'reason', 'user', 'timestamp']) if (typeof o[k] !== 'string' || !o[k].trim()) throw new Error(`settings.acceptanceCriteria.overrides[${i}]: "${k}" is mandatory`);
+    });
+  }
+
+  // Accepts gerotor-project/1..4 files or a legacy bare parameter JSON; throws Error with a readable message.
   function parse(text, designDefaults, migrateDesign) {
     let o;
     try { o = JSON.parse(text); } catch (e) { throw new Error('Not valid JSON: ' + e.message); }
@@ -196,7 +208,7 @@
       st = create(dd || design);
       st.meta = Object.assign(defaultMeta(), {
         project: md.projectName || 'Untitled gerotor', partNo: md.partNo || '', revision: md.revision || '', author: md.author || '', checker: md.checker || '',
-        approver: (md.signOff && md.signOff.approver && md.signOff.approver.name) || '', date: ws.calcDate || today(), notes: md.notes || '', scope: md.scope || '',
+        approver: (md.signOff && md.signOff.approver && md.signOff.approver.name) || '', date: ws.calcDate || today(), notes: md.notes || '', scope: md.scope || '', designLabel: md.designLabel || '',
         created: md.created || new Date().toISOString(), checked: md.checked || null, signOff: md.signOff || {},
         revisions: Array.isArray(md.revisions) ? md.revisions.map(r => ({ rev: r.rev, date: r.date, author: r.author, description: r.description })) : [],
       });
@@ -213,12 +225,15 @@
       } else st.loadCases = defaultLoadCases(Object.assign({}, dd || {}, design));
       st.activeCase = Number.isInteger(ws.activeCase) && ws.activeCase >= 0 && ws.activeCase < st.loadCases.length ? ws.activeCase : 0;
       st.calcMode = ws.calcMode || 'js';
-      st.settings = o.settings && typeof o.settings === 'object' ? o.settings : {};
+      st.settings = o.settings && typeof o.settings === 'object' ? JSON.parse(JSON.stringify(o.settings)) : {};
+      if (ver < 4 && st.settings.acceptanceCriteria && G.criteria) st.settings.acceptanceCriteria = G.criteria.migrateV3(st.settings.acceptanceCriteria);
+      checkCriteria(st.settings.acceptanceCriteria);
       if (o.measured) st.measured = o.measured;
     } else {
       if (!('N' in o) || !('e' in o)) throw new Error('Not a Gerotor project or parameter file (no schema / N / e)');
       design = o;
       st = create(dd || design);
+      st.meta.designLabel = '';        // a foreign bare parameter file is not the built-in example
     }
     if (migrateDesign) migrateDesign(design);
     st.design = Object.assign({}, dd || {}, design);
@@ -307,6 +322,19 @@
     if (!r.ok) throw new Error(path + ' -> HTTP ' + r.status);
     return r.json();
   }
+  // Resolved-input hash and certification status from the backend (POST /api/report/data with the project document).
+  // The resolved hash covers every value the calculation used (library rows, core settings); it cannot be reproduced offline,
+  // so offline only the document hash (inputHash in this file) exists. Returns null when the API is not reachable.
+  const resolved = { base: null, last: null };
+  async function fetchResolved(state) {
+    if (resolved.base === null || typeof fetch !== 'function') return null;
+    try {
+      const r = await fetch(resolved.base + '/api/report/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toDoc(state)) });
+      if (!r.ok) return null;
+      const d = await r.json();
+      return (resolved.last = { inputHash: d.inputHash, documentHash: d.documentHash, certification: d.certification || null });
+    } catch (_) { return null; }
+  }
   // Tries the page origin (when served by the backend), then the default backend on port 8770.
   async function connectBackend(bases) {
     const list = bases || ((typeof location !== 'undefined' && /^https?:/.test(location.protocol)) ? ['', 'http://127.0.0.1:8770'] : ['http://127.0.0.1:8770']);
@@ -315,6 +343,7 @@
         const h = await getJson(b, '/api/health');
         if (!stamp(h)) continue;
         try { const m = await getJson(b, '/api/methods'); if (m && m.assumptions && m.methods) G.methodsLive = m; } catch (_) { /* generated copy is used */ }
+        resolved.base = b;
         return { base: b, health: h };
       } catch (_) { /* try next */ }
     }
@@ -359,7 +388,7 @@
     Eout: ['E_o', 'Young modulus, outer rotor', 'GPa'], nuOut: ['ν_o', 'Poisson ratio, outer rotor', '-'],
   };
 
-  G.project = { VERSION, SCHEMA, SCHEMA_VERSION, EXT, HASHED_KEYS, FLUID_KEYS, UNITS, convertUnit, quantity, stamp, isStamped, connectBackend, methodsData, create, defaultMeta, defaultLoadCases, canonical, sha256Hex, sha256Sync,
-    inputHash, inputHashSync, inputsOf, inputsOfDoc, toDoc, serialize, parse, parseCaseNote, History, recentList, recentAdd, fileName, FIELDS };
+  G.project = { VERSION, SCHEMA, SCHEMA_VERSION, EXAMPLE_LABEL, EXT, HASHED_KEYS, FLUID_KEYS, UNITS, convertUnit, quantity, stamp, isStamped, connectBackend, methodsData, create, defaultMeta, defaultLoadCases, canonical, sha256Hex, sha256Sync,
+    inputHash, inputHashSync, fetchResolved, resolved, inputsOf, inputsOfDoc, toDoc, serialize, parse, parseCaseNote, History, recentList, recentAdd, fileName, FIELDS };
   G.Calc = Calc;
 })(window.Gerotor = window.Gerotor || {});

@@ -3253,20 +3253,24 @@
 "No undercut"
 ],
 [
+"info",
+"Sharp inner rotor tips - NOT EVALUATED"
+],
+[
 "ok",
 "Tip-to-valley clearance"
 ],
 [
-"ok",
-"Outer rotor wall"
+"info",
+"Outer rotor wall - NOT EVALUATED"
 ],
 [
-"ok",
-"Inner rotor wall"
+"info",
+"Inner rotor wall - NOT EVALUATED"
 ],
 [
-"ok",
-"Tip speed"
+"info",
+"Tip speed - NOT EVALUATED"
 ],
 [
 "ok",

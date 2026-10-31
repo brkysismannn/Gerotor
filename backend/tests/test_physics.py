@@ -4,7 +4,8 @@ import math
 import numpy as np
 import pytest
 
-from gerotor_core import backlash, contact, design, fluid, friction, geometry as g, leakage, reverse, spectrum
+from gerotor_core import backlash, contact, fluid, friction, geometry as g, leakage, reverse, spectrum
+from examples import design
 
 TAU = 2 * math.pi
 

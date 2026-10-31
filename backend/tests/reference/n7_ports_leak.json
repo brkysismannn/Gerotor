@@ -592,20 +592,24 @@
 "No undercut"
 ],
 [
+"info",
+"Sharp inner rotor tips - NOT EVALUATED"
+],
+[
 "ok",
 "Tip-to-valley clearance"
 ],
 [
-"ok",
-"Outer rotor wall"
+"info",
+"Outer rotor wall - NOT EVALUATED"
 ],
 [
-"ok",
-"Inner rotor wall"
+"info",
+"Inner rotor wall - NOT EVALUATED"
 ],
 [
-"ok",
-"Tip speed"
+"info",
+"Tip speed - NOT EVALUATED"
 ],
 [
 "ok",
@@ -616,20 +620,24 @@
 "No cross-porting"
 ],
 [
-"ok",
-"Inlet port velocity"
+"info",
+"Trapped volume change - NOT EVALUATED"
 ],
 [
-"warn",
-"Volumetric efficiency"
+"info",
+"Inlet port velocity - NOT EVALUATED"
 ],
 [
-"ok",
-"Pressure peaks"
+"info",
+"Volumetric efficiency - NOT EVALUATED"
 ],
 [
-"ok",
-"No cavitation"
+"info",
+"Pressure overshoot - NOT EVALUATED"
+],
+[
+"info",
+"Cavitation / incomplete filling - NOT EVALUATED"
 ],
 [
 "warn",

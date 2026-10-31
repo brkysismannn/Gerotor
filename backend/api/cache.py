@@ -1,7 +1,7 @@
 """Bounded LRU cache of calc.run results.
 
 Key = SHA-256 of the canonical JSON of {inputs, modules, code version}, where inputs are the
-hashed project keys (design, operatingPoints, settings, measured; metadata/results excluded)
+resolved calculation inputs (calc.resolved_inputs; metadata/results excluded)
 and code version = {api, gerotor_core, git}. Changing the code (version or commit) therefore
 never returns stale results. Values are the raw calc.run dicts and are shared: callers must
 not mutate them (to_json copies). Thread-safe (uvicorn runs sync endpoints in a thread pool).
@@ -27,11 +27,12 @@ def code_version() -> dict:
 
 
 def key(body: dict, modules) -> str:
-    if isinstance(body, dict) and "design" in body:
-        inputs = {k: body.get(k) for k in ("design", "operatingPoints", "settings", "measured")
-                  if body.get(k) not in (None, [], {})}
-    else:
-        inputs = {"bare": body}
+    """Resolved inputs (calc.resolved_inputs: every value used, incl. fluid and library rows) + modules
+    + code version. (Before round 5 the key omitted "fluid": two fluids could share a cache entry.)"""
+    try:
+        inputs = calc.resolved_inputs(body)
+    except Exception as exc:  # noqa: BLE001 - malformed body: key on the raw body, calc.run raises
+        inputs = {"raw": body, "error": repr(exc)}
     return sha256({"inputs": inputs, "modules": list(modules) if modules else None, "code": code_version()})
 
 

@@ -76,8 +76,11 @@
 
   /*
    * Filling-limited maximum speed: highest shaft speed whose peak chamber void fraction stays
-   * below `voidLimit` (default 0.5 %, the tool's cavitation warning level), by bisection on rpm.
-   * Also reports the speed at which the suction-port inlet velocity reaches 2 m/s.
+   * below `voidLimit` (opt.voidLimit; the core default 0.005 is a numerical search setting kept for parity with
+   * gerotor_core, the UI passes the user's C-CAV-VOID limit), by bisection on rpm.
+   * Also reports the speed at which the suction-port inlet velocity reaches the USER limit opt.inletVelocityLimit
+   * [m/s] (criterion C-PORT-V-IN): n = v_lim A_s fill / (cc 1e-6 / 60). Without a limit rpmInlet = null and
+   * rpmInletBasis says NOT EVALUATED (the former hard-coded 2 m/s had no source).
    */
   /*
    * Gerotor Design Studio cavitation limits (GDS "Calculation of Cavitation Limits", 2017), for
@@ -87,15 +90,23 @@
    *   2. inlet gallery: round pipe of the suction-port area turns turbulent (Re = U·D/ν = 2000)
    *      →  n = U·A / V_disp
    * GDS reports the lower of the two (it assumes p_in = 1.013 bar).
+   * Named assumptions (same as gerotor_core.perfmap.gds_cavitation_limits):
+   *   A-D2 head 'inlet' (default): dP_avail = p_in - p_vap; 'atm': GDS p.3, p_atm = 1.01325 bar (ISO 2533 standard atmosphere).
+   *   A-D4 doubleFillArea true (default): gallery area = suction-port area x fillS; false: GDS single-port area.
    */
-  function gdsCavitationLimits(p, res) {
-    const rho = p.rho, dpAvail = (p.pIn - p.pVap) * 1e5;
+  const P_ATM_BAR = 1.01325;
+  function gdsCavitationLimits(p, res, head, doubleFillArea) {
+    head = head === undefined ? 'inlet' : head;
+    if (head !== 'inlet' && head !== 'atm') throw new Error("head must be 'inlet' or 'atm'");
+    const useFill = doubleFillArea === undefined ? true : !!doubleFillArea;
+    const pHead = head === 'inlet' ? p.pIn : P_ATM_BAR;
+    const rho = p.rho, dpAvail = (pHead - p.pVap) * 1e5;
     const V = dpAvail > 0 ? Math.sqrt(2 * dpAvail / rho) : 0;
     const rTip = p.innerTip * 1e-3;
     const rpmTip = 60 * V / (2 * Math.PI * rTip);
     let rpmGallery = NaN, U = NaN, D = NaN;
     if (res.ports && res.ports.suction) {
-      const A = res.ports.suction.area * 1e-6 * (p.fillS || (p.doubleFill ? 2 : 1));
+      const A = res.ports.suction.area * 1e-6 * (useFill ? (p.fillS || (p.doubleFill ? 2 : 1)) : 1);
       D = Math.sqrt(4 * A / Math.PI);
       U = 2000 * p.nu * 1e-6 / D;
       rpmGallery = U * A / (res.cc * 1e-6) * 60;
@@ -111,15 +122,17 @@
     let lo = opt.rpmMin || 100, hi = opt.rpmMax || 20000, evals = 0;
     const ok = rpm => { evals++; return voidAt(p, res, rpm, dp) <= limit; };
     const fill = p.fillS || (p.doubleFill ? 2 : 1), qPerRpm = res.cc * 1e-6 / 60;       // m³/s per rpm
-    const rpmInlet = res.ports.suction ? 2 * res.ports.suction.area * 1e-6 * fill / qPerRpm : NaN;
-    const gds = gdsCavitationLimits(p, res);
-    if (!ok(lo)) return { rpm: NaN, below: lo, rpmInlet, evals, limit, gds };
-    if (ok(hi)) return { rpm: hi, above: hi, rpmInlet, evals, limit, gds };
+    const vLim = opt.inletVelocityLimit, haveV = typeof vLim === 'number' && Number.isFinite(vLim) && res.ports.suction;
+    const rpmInlet = haveV ? vLim * res.ports.suction.area * 1e-6 * fill / qPerRpm : null;
+    const rpmInletBasis = haveV ? `C-PORT-V-IN limit ${vLim} m/s (user)` : 'NOT EVALUATED - no C-PORT-V-IN limit (former 2 m/s had no source)';
+    const gds = gdsCavitationLimits(p, res, opt.cavHead, opt.cavAreaDoubleFill);
+    if (!ok(lo)) return { rpm: NaN, below: lo, rpmInlet, rpmInletBasis, evals, limit, gds };
+    if (ok(hi)) return { rpm: hi, above: hi, rpmInlet, rpmInletBasis, evals, limit, gds };
     while (hi - lo > (opt.tol || 10)) {
       const mid = 0.5 * (lo + hi);
       if (ok(mid)) lo = mid; else hi = mid;
     }
-    return { rpm: lo, rpmInlet, evals, limit, gds };
+    return { rpm: lo, rpmInlet, rpmInletBasis, evals, limit, gds };
   }
 
   const MAP_COLS = ['rpm', 'dp_bar', 'flow_Lmin', 'eta_v', 'eta_m', 'eta_t', 'torque_Nm', 'power_in_W', 'power_out_W', 'flow_ripple', 'p_max_bar_abs', 'void_max', 'hertz_MPa', 'pressure_ripple', 'side_load_N'];
@@ -132,5 +145,5 @@
     return cols.join(',') + '\n' + rows.join('\n') + '\n';
   }
 
-  Object.assign(G, { performanceMap, operatingPoint, mapCsv, maxSpeed, voidAt, gdsCavitationLimits, MAP_COLS, mapRow });
+  Object.assign(G, { P_ATM_BAR, performanceMap, operatingPoint, mapCsv, maxSpeed, voidAt, gdsCavitationLimits, MAP_COLS, mapRow });
 })(window.Gerotor);

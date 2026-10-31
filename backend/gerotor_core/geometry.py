@@ -48,6 +48,20 @@ from .errors import InvalidDesignError, require_design  # noqa: E402,F401
 
 PEAK_GAP_FACTOR = 2.0  # peak tip-to-tip gap / profile clearance c (Ivanovic 2012 Fig. 6-8, ~2)
 
+# Numerical settings (values = JS tool; convergence evidence: docs/convergence.md).
+TOOL_COARSE_N = 720        # N03 coarse scan of the concave trochoid branch
+TOOL_GOLDEN_STEPS = 60     # N03 golden-section steps (0.618^60 of one coarse cell)
+INNER_SECTOR_PANELS = 24   # N05 composite 8-point Gauss-Legendre panels
+FILLET_PROFILE_N = 3000    # N04 polar table of the clearance inner profile
+FILLET_PTS = 14            # N04 points per fillet arc
+FILLET_ENDS = True         # N04 include the arc end points (JS: False -> O(1/n) error, docs/convergence.md)
+FILLET_POS_PER_LOBE = 64   # N04 rotor positions per lobe
+CURV_N = 4000              # N02 undercut scan points
+CURV_N_FAST = 800          # N02 fast mode (Design Assist only)
+CHAMBER_N_IN = 48          # N06 chamber polygon, inner-profile points
+CHAMBER_N_OUT = 16         # N06 chamber polygon, outer-path points
+ACTUAL_AREA_STRIDE = 2     # N06 actual (clearance) area evaluated every 2nd sample
+
 
 def peak_gap_to_c(peak_gap: float) -> float:
     """Catalogue tip-to-tip (peak) gap [mm] -> profile equidistance clearance c [mm] (~ gap / 2).
@@ -154,7 +168,7 @@ def inner_tool_diameter(p: Params) -> dict:
     Where the trochoid is concave (rho_Q < 0) the inner profile, offset inward by rp + c, is
     concave with radius |rho_Q| + rp + c. Coarse scan (720 points) + 60 golden-section steps.
     """
-    per, n = TAU / (p["N"] - 1), 720
+    per, n = TAU / (p["N"] - 1), TOOL_COARSE_N
     best, phiB = math.inf, 0.0
     for i in range(n):
         phi = per * i / n
@@ -170,7 +184,7 @@ def inner_tool_diameter(p: Params) -> dict:
 
     a, b = phiB - per / n, phiB + per / n
     g = (math.sqrt(5) - 1) / 2
-    for _ in range(60):
+    for _ in range(TOOL_GOLDEN_STEPS):
         x1, x2 = b - g * (b - a), a + g * (b - a)
         if f(x1) < f(x2):
             b = x2
@@ -302,12 +316,14 @@ def _add_fillet(p: Params, L: dict) -> None:
     L["filletCentre"] = F
 
 
-def fillet_points(p: Params, L: dict, k: int, which: int, n: int):
+def fillet_points(p: Params, L: dict, k: int, which: int, n: int, ends: bool = False):
+    """n points on the fillet arc; the two tangency end points are omitted (profile building) unless
+    ``ends`` (fillet clearance: the minimum clearance lies at an end point, docs/convergence.md)."""
     if not L.get("fillets"):
         return []
     f, th = L["fillets"][which], TAU * k / p["N"]
     pts = []
-    for i in range(1, n - 1):
+    for i in (range(n) if ends else range(1, n - 1)):
         a = f["a0"] + f["d"] * i / (n - 1)
         pts.append(rot((f["c"][0] + p["fillet"] * math.cos(a), f["c"][1] + p["fillet"] * math.sin(a)), th))
     return pts
@@ -378,7 +394,7 @@ _GLW = np.array([0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3
                  0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763])
 
 
-def inner_sector(p: Params, phi0, phi1, a1, C1, n_sub: int = 24, offset: float | None = None) -> float:
+def inner_sector(p: Params, phi0, phi1, a1, C1, n_sub: int | None = None, offset: float | None = None) -> float:
     """Green sector of the inner profile between phi0 and phi1, mapped to the housing frame.
 
     P = Q - r n (offset curve), P' = Q' (1 - r kappa), X = Rot(a1) P + C1:
@@ -386,6 +402,7 @@ def inner_sector(p: Params, phi0, phi1, a1, C1, n_sub: int = 24, offset: float |
     Composite 8-point Gauss-Legendre (n_sub panels, ~1e-10 rel. on sharp-tipped designs).
     """
     r = p["rp"] if offset is None else offset
+    n_sub = n_sub or INNER_SECTOR_PANELS
     h = (phi1 - phi0) / n_sub
     mids = phi0 + (np.arange(n_sub) + 0.5) * h
     ph = (mids[:, None] + 0.5 * h * _GLX[None, :]).ravel()
@@ -472,7 +489,7 @@ def chamber_actual_area(p: Params, t: float, L: dict) -> float:
     def cross(A, B):
         return 0.5 * (A[0] * B[1] - A[1] * B[0])
 
-    return outer_sector(p, L, psi0, psi1) + cross(c1, i1) - inner_sector(p, phi0, phi1, a1, C1, 24, off) + cross(i0, c0)
+    return outer_sector(p, L, psi0, psi1) + cross(c1, i1) - inner_sector(p, phi0, phi1, a1, C1, INNER_SECTOR_PANELS, off) + cross(i0, c0)
 
 
 def fillet_clearance(p: Params, L: dict) -> float:
@@ -483,7 +500,7 @@ def fillet_clearance(p: Params, L: dict) -> float:
     """
     if not L.get("fillets"):
         return math.inf
-    n = 3000
+    n = FILLET_PROFILE_N
     prof = inner_profile(p, n, p["rp"] + max(0.0, p["c"]))
     ang = np.arctan2(prof[:, 1], prof[:, 0])
     rad = np.hypot(prof[:, 0], prof[:, 1])
@@ -492,8 +509,8 @@ def fillet_clearance(p: Params, L: dict) -> float:
     # periodic extension so that np.interp handles the wrap-around segment like the JS code
     angE = np.concatenate([[ang[-1] - TAU], ang, [ang[0] + TAU]])
     radE = np.concatenate([[rad[-1]], rad, [rad[0]]])
-    pts = np.array(fillet_points(p, L, 0, 0, 14) + fillet_points(p, L, 0, 1, 14))
-    M = p["N"] * 64
+    pts = np.array(fillet_points(p, L, 0, 0, FILLET_PTS, FILLET_ENDS) + fillet_points(p, L, 0, 1, FILLET_PTS, FILLET_ENDS))
+    M = p["N"] * FILLET_POS_PER_LOBE
     worst = math.inf
     for j in range(M):
         t = TAU * j / M
@@ -546,14 +563,16 @@ def derive(p: Params) -> Params:
     return q
 
 
-def analyse(p: Params, samples: int = 96, fast: bool = False, sub_models: bool = True) -> dict:
+def analyse(p: Params, samples: int = 96, fast: bool = False, sub_models: bool = True, skip=()) -> dict:
     """Full kinematic analysis over one outer-rotor revolution.
 
     Grid: M = N * samples, t_j = j * dt. Returns chamber area A [mm^2], dA/dt, delivery per unit
     width q, displacement cc [cm^3 per shaft rev] = (N-1) (Amax - Amin) b / 1000 (or in fast
     mode the mean of the summed negative dV/dphi, Rundo 2017 Eq. 20), kinematic ripple, ideal
     torque and power, and design checks. With ``sub_models`` the backlash, port/pressure,
-    contact and friction models are run as in the JS ``analyse``.
+    contact and friction models are run as in the JS ``analyse``. ``skip`` names sub-models
+    ("backlash", "ports", "contact", "mech") that are not run (API: their inputs are missing, the
+    results are reported NOT EVALUATED); default () = JS behaviour.
     """
     require_design(p, "analyse", ("N", "e", "R", "rp", "c", "Rv", "RvMin", "innerTip", "innerRoot", "OD", "b", "bore"))
     res: dict = {"valid": False, "checks": []}
@@ -584,7 +603,7 @@ def analyse(p: Params, samples: int = 96, fast: bool = False, sub_models: bool =
                 push("err", "Fillet hits inner rotor")
             else:
                 push("ok", "Fillet clearance")
-    res["rhoMin"] = min_convex_curvature(p, 800 if fast else 4000)
+    res["rhoMin"] = min_convex_curvature(p, CURV_N_FAST if fast else CURV_N)
     off = p["rp"] + p["c"]
     if off >= res["rhoMin"]:
         push("err", "Inner rotor undercut")
@@ -629,7 +648,7 @@ def analyse(p: Params, samples: int = 96, fast: bool = False, sub_models: bool =
     polys = None if fast else [None] * M
     psiAbs = 0.0
     for j in range(M):
-        ch = chamber(p, j * dt, L, -1 if fast else 48, 16)
+        ch = chamber(p, j * dt, L, -1 if fast else CHAMBER_N_IN, CHAMBER_N_OUT)
         dA[j] = ch["dAdt"]
         if not fast:
             A[j] = ch["area"]
@@ -642,7 +661,7 @@ def analyse(p: Params, samples: int = 96, fast: bool = False, sub_models: bool =
     Amin = Amax = math.nan
     if A is not None:
         Amin, Amax = float(A.min()), float(A.max())
-        act = [chamber_actual_area(p, j * dt, L) for j in range(0, M, 2)]
+        act = [chamber_actual_area(p, j * dt, L) for j in range(0, M, ACTUAL_AREA_STRIDE)]
         res["AminActual"], res["AmaxActual"] = min(act), max(act)
 
     step = M // N
@@ -662,15 +681,15 @@ def analyse(p: Params, samples: int = 96, fast: bool = False, sub_models: bool =
 
     if sub_models and not fast:
         from . import backlash, contact, friction, ports  # local import: avoid cycles
-        if p["c"] > 0:
+        if p["c"] > 0 and "backlash" not in skip:
             res["backlash"] = backlash.compute_backlash(p, res)
-        if p.get("portsOn"):
+        if p.get("portsOn") and "ports" not in skip:
             res["ports"] = ports.analyse_ports(p, res, L)
             res["checks"] += res["ports"]["checks"]
-        if p["dp"] > 0:
+        if p["dp"] > 0 and "contact" not in skip:
             ct = res["contact"] = contact.compute_contact(p, res)
             push("warn" if ct["reversal"] else "ok", "Contact force reversal" if ct["reversal"] else "Contact force")
-        if p["rpm"] > 0 and p["nu"] > 0:
+        if "mech" not in skip and p["rpm"] > 0 and p["nu"] > 0:
             res["mech"] = friction.compute_mechanical(p, res)
     res["valid"] = not any(c["level"] == "err" for c in res["checks"])
     return res

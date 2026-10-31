@@ -7,8 +7,26 @@ Last run: 2026-10-23 — **286 pass · 0 fail · 3 known** (289 tests, ~140 s).
 
 2026-10-30 — Python backend (`backend/`, `python -m pytest -q`): **163 pass · 0 fail · 0 xfail**, incl. JS parity
 (4 author + 15 independent designs, rel. 1e-9) and independent UI/report review tests. Frontend suite in V8
-(mini-racer): 0 new failures; 2 environment-only fails (DOMParser/TextDecoder absent in bare V8). A full run in
-a real browser after the frontend/ move and workspace UI is still pending.
+(mini-racer): 0 new failures; 2 environment-only fails (DOMParser/TextDecoder absent in bare V8). 2026-10-31 — real
+browser run (served by the FastAPI server on :8770): **330 pass · 0 fail · 3 known** (333 tests, 158 s).
+
+2026-10-31 (backend round 5/6, design-sim-engineer) — Python backend (`backend/`, `python -m pytest -q`): **223 pass · 0 fail ·
+0 xfail** (6.6 min). Contents:
+- JS parity: 4 reference designs (`tests/reference`, regenerated 2026-10-31 with criteria.js and the round-6 JS mirror) and 15
+  independent review designs, rel. 1e-9. Check rows are compared as non-neutralised verdicts plus the criterion ids of the
+  NOT EVALUATED rows. n9: fillet clearance 0.42653 mm and crossDeg 7.5 deg in both JS and Python.
+- Frontend self-test suite in V8 (mini-racer, all non-DOM scripts in index.html order): **381 pass · 2 fail · 3 known**
+  (386); the 2 fails are environment only (DOMParser / TextDecoder absent in bare V8). FRONTEND-SUITE and FRONTEND-SCHEMA3
+  xfails removed.
+- Literature validation (`tests/test_literature_validation.py`, 20 tests): Colbourne 1975 Table 2 (m = 3-9: rho_min, flow,
+  flow variation) and Fig. 1 pump; Colbourne Eq. 11 rho_min vs the 4000-point scan (rel. 1e-5); Colbourne Eq. 28 dA/dpsi vs
+  `chamber` dA (round-off); Ivanovic 2012 Figs. 9a/10a lag 0.225-0.259 deg (outer-rotor lag x N/(N-1)); Kim 2006 sigma1
+  12.294 deg, chamber maximum 343.64 deg, port edges (definition difference, see convergence.md).
+- No silent defaults (`tests/test_api_round5.py`): missing inputs give 422 or NOT EVALUATED; unsourced library oil gives
+  NOT FOR CERTIFICATION; resolved input hash differs whenever the computation differs; Hertz cap active design.
+- Convergence / sensitivity of every numerical setting: `docs/convergence.md` (script `backend/tools/convergence_study.py`).
+  Round 6 fixes (Python and JS): fillet-clearance end points included (n9 0.5386 -> 0.42653 mm), port "open" tolerance 0
+  (n9 crossDeg 5.0 -> 7.5 deg).
 
 ## Change log of the numerical core
 

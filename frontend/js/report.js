@@ -107,6 +107,7 @@
     return KNOWN_ISSUES.map(k => ({ id: k.id, title: k.title, state: typeof k.inRange === 'function' ? (k.inRange(p) ? 'in range' : 'out of range') : 'range not defined (not evaluated)' }));
   }
 
+  const kindTag = k => (k === 'unsourced' ? '<span class="kind-unsourced">[unsourced]</span>' : `<span class="small">[${esc(k)}]</span>`);
   const rankOf = t => /INVALID/.test(t) ? 2 : (/WARN/.test(t) ? 1 : 0);
   /*
    * Overall status = worst over the analysed case and ALL load cases (opts.caseResults). INVALID when: the analysis failed, any check is
@@ -155,6 +156,71 @@
     return v && a.switch && v[a.switch] !== undefined ? v[a.switch] : a.default;
   };
 
+  // ---- DRAFT / UNSIGNED: a report without author or checker is not a signed document
+  const unsigned = m => !String(m.author || '').trim() || !String(m.checker || '').trim();
+
+  // ---- backend bulk data dropped by to_json(arrays=False) is listed in "_omitted": [{key, length, reason}] on the parent object
+  function collectOmitted(tree, path, out) {
+    out = out || []; path = path || '';
+    if (tree && typeof tree === 'object') {
+      if (Array.isArray(tree._omitted)) for (const o of tree._omitted) out.push({ path: path || '(root)', key: o.key, length: o.length, reason: o.reason });
+      if (!Array.isArray(tree)) for (const k of Object.keys(tree)) if (k !== '_omitted' && tree[k] && typeof tree[k] === 'object') collectOmitted(tree[k], path ? path + '.' + k : k, out);
+    }
+    return out;
+  }
+
+  // ---- acceptance criteria section (backend /api/report/data acceptanceCriteria shape)
+  const fv = x => (typeof x === 'number' && Number.isFinite(x) ? String(+x.toPrecision(5)) : '-');
+  function limitText(c) {
+    const lim = c.limit;
+    if (lim === null || lim === undefined) return '-';
+    if (typeof lim === 'object') return 'fromMaterial' in lim ? 'material ' + esc(lim.fromMaterial) : fv(lim.min) + ' .. ' + fv(lim.max);
+    return fv(lim);
+  }
+  function allowText(c) {
+    const a = c.allowable;
+    if (a === null || a === undefined) return c.comparison === 'true' ? 'must hold' : (c.limit === null || c.limit === undefined ? 'no limit entered' : '-');
+    if (a === true) return 'must hold';
+    if (typeof a === 'object') return fv(a.min) + ' .. ' + fv(a.max);
+    return (c.comparison === '<=' ? '&le; ' : c.comparison === '>=' ? '&ge; ' : '') + fv(a) + (c.safetyFactor ? ' (limit ' + limitText(c) + ', S = ' + fv(c.safetyFactor) + ')' : ' (limit ' + limitText(c) + ')');
+  }
+  function criteriaSection(ac, num) {
+    const h = [];
+    h.push(`<h2 id="criteria">${num} Acceptance criteria</h2>`);
+    h.push(`<p data-criteria-overall="${esc(ac.overall)}"><b>Overall: ${esc(ac.overall)}</b> &nbsp; PASS ${ac.counts.PASS} / FAIL ${ac.counts.FAIL} / NOT EVALUATED ${ac.counts['NOT EVALUATED']} / disabled ${ac.counts.disabled}. Profile: ${esc(ac.profileName)} (version ${esc(ac.profileVersion)}, basis ${esc(ac.basis)}).</p>`);
+    const au = ac.authority || {};
+    h.push(`<p class="small">Authority: ${esc(au.name || 'not stated')}${au.document ? ', ' + esc(au.document) : ''}${au.edition ? ', edition ' + esc(au.edition) : ''}. Materials: inner ${esc((ac.materials || {}).inner || 'none selected')}, outer ${esc((ac.materials || {}).outer || 'none selected')}.</p>`);
+    h.push(`<table class="criteria"><tr><th>ID</th><th>Quantity</th><th>Value</th><th>Allowable (limit, S)</th><th>Margin %</th><th>Status</th><th>Governing case</th><th>Source</th></tr>`);
+    for (const c of ac.criteria) {
+      const cls = c.status === 'FAIL' ? 'lvl-err' : c.status === 'PASS' ? 'lvl-ok' : 'lvl-warn';
+      const val = c.value === null || c.value === undefined ? '-' : typeof c.value === 'boolean' ? (c.value ? 'true' : 'false') : fv(c.value);
+      const src = c.source ? esc(c.source.label || '') + (c.source.doc ? '<br>' + esc(c.source.doc) : '') + (c.source.clause ? ', ' + esc(c.source.clause) : '') + (c.source.verified === false ? ' <span class="small">[not verified]</span>' : '') : '';
+      h.push(`<tr id="crit-${esc(c.id)}" data-criterion="${esc(c.id)}"${c.enabled ? '' : ' class="small"'}><td><b>${esc(c.id)}</b>${c.overridden ? ' *' : ''}${c.custom ? ' (custom)' : ''}</td><td>${esc(c.quantityTitle || c.title)}</td><td class="n">${esc(val)} ${esc(c.unit && c.unit !== '-' ? c.unit : '')}</td><td>${allowText(c)}</td>` +
+        `<td class="n">${c.marginPct === null || c.marginPct === undefined ? '-' : fx(c.marginPct, 1)}</td><td class="${cls}" data-status="${esc(c.status)}">${esc(c.status)}${c.reason ? '<br><span class="small">' + esc(c.reason) + '</span>' : ''}</td><td>${esc(c.governingCase || '-')}</td><td>${src}</td></tr>`);
+    }
+    h.push(`</table><p class="small">* = limit, safety factor, enabled flag, source or material value was entered by the user (see overrides).</p>`);
+    h.push(`<h3>Overrides (user-entered values)</h3>`);
+    if (!ac.overrides.length) h.push(`<p data-overrides="none">No override has been entered: no limit value is set, every limit-based criterion is NOT EVALUATED.</p>`);
+    else {
+      h.push(`<table class="overrides"><tr><th>Target</th><th>ID</th><th>Field</th><th>Old value</th><th>New value</th><th>Unit</th><th>Reason</th><th>User</th><th>Timestamp</th></tr>`);
+      for (const o of ac.overrides) {
+        const js = v => (v !== null && typeof v === 'object' ? JSON.stringify(v) : v);
+        h.push(`<tr><td>${esc(o.target)}</td><td>${esc(o.id)}</td><td>${esc(o.field)}</td><td>${esc(js(o.oldValue))}</td><td>${esc(js(o.newValue))}</td><td>${esc(o.unit)}</td><td>${esc(o.reason)}</td><td>${esc(o.user)}</td><td>${esc(o.timestamp)}</td></tr>`);
+      }
+      h.push(`</table>`);
+    }
+    if (ac.materialLibrary && ac.materialLibrary.length) {
+      h.push(`<h3>Selected materials (allowables)</h3><table class="materials"><tr><th>ID</th><th>Name</th><th>&sigma;<sub>Hlim</sub> (${esc(ac.materialLibrary[0].unit)})</th><th>Yield</th><th>Condition</th><th>Source</th></tr>`);
+      for (const m of ac.materialLibrary) h.push(`<tr><td>${esc(m.id)}</td><td>${esc(m.name)}</td><td class="n">${fv(m.sigmaHlim)}</td><td class="n">${fv(m.yield)}</td><td>${esc(m.condition)}</td><td>${esc((m.source || {}).label)}${(m.source || {}).doc ? '<br>' + esc(m.source.doc) : ''}</td></tr>`);
+      h.push(`</table>`);
+    }
+    if (ac.issues && ac.issues.length) h.push(`<p class="lvl-err">Issues in the criteria set: ${esc(ac.issues.join('; '))}</p>`);
+    h.push(`<p>Criteria-set hash (SHA-256 of the effective set: profile, authority, materials, library, criteria): <span class="mono" id="criteriaHash">${esc(ac.criteriaHash)}</span></p>`);
+    h.push(`<p class="small">Assumptions used: ${esc((ac.assumptions || []).join(', '))} (see Methods and assumptions).</p>`);
+    h.push(`<p class="statement" data-statement="acceptance"><b>${esc(ac.statement)}</b></p>`);
+    return h.join('\n');
+  }
+
   const CSS = `
   @page { size: A4; margin: 18mm 14mm 18mm 14mm;
     @bottom-left { content: "Gerotor calculation report"; font: 8pt Arial, sans-serif; color: #555; }
@@ -171,6 +237,9 @@
   .banner.ok { color: #137a3d; border-color: #137a3d; } .banner.warn { color: #9a6a00; border-color: #9a6a00; } .banner.bad { color: #b02424; border-color: #b02424; }
   .mono { font-family: Consolas, monospace; font-size: 8.5pt; word-break: break-all; }
   .lvl-ok { color: #137a3d; } .lvl-warn { color: #9a6a00; } .lvl-err { color: #b02424; font-weight: bold; } .lvl-info { color: #2a5db0; }
+  .draft { color: #b02424; border-color: #b02424; } .kind-unsourced { color: #b02424; font-weight: bold; }
+  [data-draft-mark] { position: fixed; top: 4px; left: 8px; font-weight: bold; font-size: 9pt; }
+  .statement { border: 1.5px solid #234; padding: 6px 10px; margin: 8px 0; }
   .sign td { height: 34px; } .small { font-size: 8.5pt; color: #444; }
   .noprint { position: fixed; top: 8px; right: 8px; } @media print { .noprint { display: none; } }
   `;
@@ -190,19 +259,29 @@
     const h = [];
     h.push(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(m.project)} - calculation report</title><style>${CSS}</style></head><body>`);
     h.push(`<button class="noprint" onclick="window.print()">Print / save as PDF</button>`);
+    if (unsigned(m)) h.push(`<div class="small lvl-err" data-draft-mark="true">DRAFT / UNSIGNED - author or checker missing</div>`);
     // cover
     h.push(`<section class="cover"><h1>Gerotor pump calculation report</h1><div class="sub">${esc(m.project)}</div>`);
+    const draft = unsigned(m);
+    const AC = opts.criteria || (G.criteria ? G.criteria.evaluate(state.settings && state.settings.acceptanceCriteria, G.criteria.context(state.settings, p, res, opts.caseRuns)) : null);
     h.push(`<div class="banner ${cls}" data-status="${esc(st.text)}">Calculation status: ${esc(st.text)}</div>`);
+    if (draft) h.push(`<div class="banner draft" data-draft="true">DRAFT / UNSIGNED</div><p class="lvl-err">${!String(m.author || '').trim() ? 'Author' : ''}${!String(m.author || '').trim() && !String(m.checker || '').trim() ? ' and ' : ''}${!String(m.checker || '').trim() ? 'Checker' : ''} not entered in Project properties: this report is a draft and has not been signed by a responsible person.</p>`);
+    if (m.designLabel) h.push(`<p data-design-label="1"><b>Design basis: ${esc(m.designLabel)}.</b> The input values were not derived by this software.</p>`);
     if (!st.valid) h.push(`<div class="banner bad" data-cert="not-for-certification">NOT FOR CERTIFICATION</div><p class="lvl-err">This report is INVALID: ${esc(st.reasons.join('; '))}. Do not use the numbers for release.</p>`);
     h.push(`<h3>Status per load case (worst case governs)</h3><table class="casestatus"><tr><th>Case</th><th>Status</th></tr>` +
       st.cases.map(c => `<tr><td>${esc(c.name)}</td><td class="${rankOf(c.status) === 2 ? 'lvl-err' : rankOf(c.status) === 1 ? 'lvl-warn' : 'lvl-ok'}">${esc(c.status)}</td></tr>`).join('') + `</table>`);
-    h.push(`<p data-acceptance="not-evaluated"><b>Acceptance criteria: NOT EVALUATED.</b> No acceptance criteria are defined or evaluated by this software version (authority pending); the numbers are calculation results, not a pass/fail verdict.</p>`);
+    if (AC) h.push(`<p data-acceptance="${esc(AC.overall.toLowerCase())}"><b>Acceptance criteria: ${esc(AC.overall)}</b> (PASS ${AC.counts.PASS}, FAIL ${AC.counts.FAIL}, NOT EVALUATED ${AC.counts['NOT EVALUATED']}; profile ${esc(AC.profileName)}; see section Acceptance criteria). ${esc(AC.statement)}</p>`);
+    else h.push(`<p data-acceptance="not-evaluated"><b>Acceptance criteria: NOT EVALUATED.</b> The criteria module is not loaded; the numbers are calculation results, not a pass/fail verdict.</p>`);
     h.push(`<table class="ident"><tr><th>Project</th><td>${esc(m.project)}</td><th>Report ID</th><td>${esc(reportId)}</td></tr>
       <tr><th>Part number</th><td>${esc(m.partNo)}</td><th>Date</th><td>${esc(date)}</td></tr>
       <tr><th>Revision</th><td>${esc(m.revision)}</td><th>Calculation mode</th><td>${esc(state.calcMode || 'js')}</td></tr>
       <tr><th>Author</th><td>${esc(m.author)}</td><th>Software</th><td>${esc(V.core)} (workspace ${esc(V.app)})</td></tr>
       <tr><th>Checker</th><td>${esc(m.checker)}</td><th>Git commit</th><td>${esc(V.gitHash || 'NOT STAMPED')}</td></tr></table>`);
+    const RS = opts.resolved || null;
     h.push(`<h3>Input hash (SHA-256 of canonical design + load cases)</h3><div class="mono" id="inputHash">${esc(hash)}</div>`);
+    if (RS && RS.inputHash) h.push(`<p class="small">Resolved-input hash (backend, every value used incl. library rows and numerical settings): <span class="mono" id="resolvedHash">${esc(RS.inputHash)}</span><br>Document hash (file): <span class="mono" id="documentHash">${esc(RS.documentHash)}</span></p>`);
+    else h.push(`<p class="small" data-resolved="offline">Document hash only (offline): the resolved-input hash needs the backend.</p>`);
+    if (RS && RS.certification) h.push(`<p class="${RS.certification.status === 'NO BLOCKING ITEM FOUND' ? 'lvl-ok' : 'lvl-err'}" data-certification="${esc(RS.certification.status)}"><b>Certification status: ${esc(RS.certification.status)}</b>${(RS.certification.reasons || []).length ? ' - ' + esc(RS.certification.reasons.join('; ')) : ''}<br><span class="small">${esc(RS.certification.note || '')}</span></p>`);
     h.push(`<p class="small">Reproducibility: the same input hash and the same software version give identical numbers.${V.gitHash ? '' : ' The git commit is not stamped in this build, so the report is not fully traceable.'}</p>`);
     if (m.notes) h.push(`<h3>Notes</h3><p>${esc(m.notes).replace(/\n/g, '<br>')}</p>`);
     h.push(`</section>`);
@@ -258,9 +337,12 @@
     if (!checks.length) h.push(`<p>No checks available.</p>`); else {
       const ord = { err: 0, warn: 1, info: 2, ok: 3 };
       h.push(`<table class="checks"><tr><th>Level</th><th>Check</th><th>Detail</th></tr>`);
-      for (const c of checks.slice().sort((a, b) => ord[a.level] - ord[b.level])) h.push(`<tr><td class="lvl-${esc(c.level)}">${esc(String(c.level).toUpperCase())}</td><td>${esc(c.title)}</td><td>${esc(c.detail)}</td></tr>`);
+      for (const c of checks.slice().sort((a, b) => ord[a.level] - ord[b.level])) h.push(`<tr><td class="lvl-${esc(c.level)}">${esc(String(c.level).toUpperCase())}</td><td>${esc(c.title)}</td><td>${esc(c.detail)}${c.criterion ? ` (<a href="#crit-${esc(c.criterion)}" data-criterion-link="${esc(c.criterion)}">criterion ${esc(c.criterion)}</a>)` : ''}</td></tr>`);
       h.push(`</table>`);
     }
+    if (AC) h.push(criteriaSection(AC, sec++));
+    const omitted = (opts.omitted || []).concat(opts.backendData ? collectOmitted(opts.backendData) : []);
+    if (omitted.length) h.push(`<h3>Omitted bulk data</h3><p class="small" data-omitted="${omitted.length}">The backend left out the following bulk arrays from the report data (they are not truncated results; they are in the full calculation): ${omitted.map(o => esc(o.path + '.' + o.key) + ' (' + esc(o.length) + ' entries' + (o.reason ? ', ' + esc(o.reason) : '') + ')').join('; ')}.</p>`);
     // methods
     const md = G.project.methodsData();
     h.push(`<h2>${sec++} Methods and assumptions</h2>`);
@@ -273,14 +355,14 @@
         h.push(`<tr data-id="${esc(a.id)}"><td><b>${esc(a.id)}</b></td><td>${esc(a.name)}</td><td>${a.switch ? esc(a.switch + ' = ' + JSON.stringify(v)) + (nd ? ' (non-default)' : ' (default)') : 'fixed'}</td><td>${esc(a.text)}</td></tr>`);
       }
       h.push(`</table><h3>Methods per result module</h3><table class="methods"><tr><th>Module</th><th>Method and equations</th><th>Sources</th><th>Assumptions</th></tr>`);
-      for (const mm of md.methods) h.push(`<tr data-method="${esc(mm.id)}"><td><b>${esc(mm.id)}</b></td><td>${esc(mm.method)}<br>${(mm.equations || []).map(e => '<span class="mono">' + esc(e) + '</span>').join('<br>')}</td><td>${(mm.sources || []).map(s => esc(s.ref) + ' [' + esc(s.kind) + ']: ' + esc(s.use)).join('<br>')}</td><td>${esc((mm.assumptions || []).join(', ') || '-')}</td></tr>`);
+      for (const mm of md.methods) h.push(`<tr data-method="${esc(mm.id)}"><td><b>${esc(mm.id)}</b></td><td>${esc(mm.method)}<br>${(mm.equations || []).map(e => '<span class="mono">' + esc(e) + '</span>').join('<br>')}</td><td>${(mm.sources || []).map(s => esc(s.ref) + ' ' + kindTag(s.kind) + ': ' + esc(s.use)).join('<br>')}</td><td>${esc((mm.assumptions || []).join(', ') || '-')}</td></tr>`);
       h.push(`</table>`);
     }
-    h.push(`<p class="small"><b>Limits:</b> safety factors and a cavitation margin criterion are not defined; the report shows raw maxima only (acceptance criteria not evaluated). Thermal and elastic deformation are not modelled.</p>`);
+    h.push(`<p class="small"><b>Limits:</b> limits and safety factors are not supplied by the software; see section Acceptance criteria for what the user entered. Sources of kind <span class="kind-unsourced">[unsourced]</span> have no documented origin and must be replaced before release. Thermal and elastic deformation are not modelled.</p>`);
     h.push(`<h3>Known open issues of the validation suite</h3><table class="known"><tr><th>ID</th><th>Issue</th><th>Input range</th></tr>` +
       knownIssues(p).map(k => `<tr><td>${esc(k.id)}</td><td>${esc(k.title)}</td><td>${esc(k.state)}</td></tr>`).join('') + `</table>`);
     h.push(`<h2>${sec++} References</h2><ol>`);
-    for (const r of referenceList()) h.push(`<li>${esc(r.ref)} <span class="small">[${esc(r.kind)}]</span></li>`);
+    for (const r of referenceList()) h.push(`<li>${esc(r.ref)} ${kindTag(r.kind)}</li>`);
     h.push(`</ol><p class="small">Standards context (owner to confirm the authority): ISO 9001 documented records; ISO/IEC 17025 style stated method and traceability.</p>`);
     h.push(`<h2>${sec++} Software and validation status</h2><table><tr><th>Item</th><th>Value</th></tr>
       <tr><td>Calculation engine</td><td>${esc(V.core)}</td></tr><tr><td>Workspace</td><td>${esc(V.app)}</td></tr>
@@ -298,6 +380,6 @@
     return h.join('\n');
   }
 
-  G.report = { build, rows, series, status, knownIssues, KNOWN_ISSUES, referenceList, esc,
+  G.report = { build, criteriaSection, collectOmitted, unsigned, rows, series, status, knownIssues, KNOWN_ISSUES, referenceList, esc,
     get METHODS() { return assumptionPairs(); } };
 })(window.Gerotor);

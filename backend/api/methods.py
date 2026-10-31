@@ -8,11 +8,15 @@ textbook / in-house derivation and not taken from a cited paper, the source says
 (``kind = "derivation"``). tests/test_api.py enforces that every module lists >= 1 source and
 that every assumption id exists.
 
-Fields per source: ``ref`` (short citation), ``kind`` ("literature" | "standard" | "derivation"),
-``use`` (what is taken from it).
+Fields per source: ``ref`` (short citation), ``kind``, ``use`` (what is taken from it).
+Provenance kinds (owner rule no-unexplained-numbers): "literature" / "standard" (cited),
+"derivation" (equation chain in the docs), "numerical-justified" (setting with a convergence study,
+docs/convergence.md), "user input" (no default; missing -> NOT EVALUATED), "validation" (literature
+test vector reproduced by a test), "unverified" (attributed source not checked), "unsourced".
 """
 from __future__ import annotations
 
+from . import criteria as _criteria
 from gerotor_core import backlash, contact, fluid, friction, geometry, leakage, perfmap, ports, reverse, spectrum
 
 IVANOVIC = "Ivanovic et al. 2012"
@@ -23,10 +27,17 @@ GAMEZ = "Gamez-Montero et al. (gerotor design review)"
 GDS_CAV = "GDS 2017, Calculation of Cavitation Limits"
 GDS_POWER = "GDS 2016, power model (single-sided ports)"
 JOHNSON = "Johnson, Contact Mechanics (Hertz line contact)"
+COLBOURNE = "Colbourne 1975, Trans. CSME 3(4) 215-223"
+BONANDRINI = "Bonandrini et al. 2009, Proc. IMechE C 223 1469-1479"
+CONVERGENCE = "docs/convergence.md (convergence / sensitivity study, 4 reference designs)"
 
 
 def _s(ref, kind, use):
     return {"ref": ref, "kind": kind, "use": use}
+
+
+NUMERICS = _s(CONVERGENCE, "numerical-justified", "grid, sample, sub-step and iteration settings")
+USER = lambda what: _s("user input (no default; missing -> NOT EVALUATED)", "user input", what)  # noqa: E731
 
 
 # key in results -> registry entry
@@ -41,16 +52,26 @@ METHODS = {
             "cc = (N - 1) (A_max - A_min) b / 1000 [cm^3 per shaft rev]",
         ],
         "sources": [_s(IVANOVIC, "literature", "profile generation, equidistance eps Eq.(9), peak gap ~ 2c"),
-                    _s(GAMEZ, "literature", "lambda_G = N e / R Eq.(3), recommended range 0.6-0.8")],
+                    _s(GAMEZ, "literature", "lambda_G = N e / R Eq.(3), recommended range 0.6-0.8"),
+                    _s(COLBOURNE, "literature", "trochoid curvature Eq. 8, undercut Eq. 9-11, RvMin p. 219, "
+                       "dA/dpsi Eq. 28, flow Eq. 29"),
+                    _s(COLBOURNE + " Table 2 / Fig. 1, Eq. 11, Eq. 28", "validation",
+                       "tests/test_literature_validation.py: rho_min, flow, flow variation, dA reproduced"),
+                    USER("N, e, R, rp, b, c, OD, bore, rpm, dp, Rv/RvClear (InvalidDesign if missing)"),
+                    NUMERICS],
         "assumptions": ["A-D3", "A-D7"],
     },
     "backlash": {
         "module": backlash, "functions": ("compute_backlash",),
         "method": "Outer-rotor lag (backlash) from the clearance gap function",
         "equations": ["h_k = c + d_k (signed normal distance lobe centre to trochoid)",
-                      "delta(t): min_k h_k(delta) = 0 (bisection), period 2 pi / N"],
+                      "delta(t) = OUTER-ROTOR LAG: min_k h_k(delta) = 0 (bisection), period 2 pi / N",
+                      "inner-gear lag (Ivanovic) = delta N / (N - 1)"],
         "sources": [_s(IVANOVIC, "literature", "lagging outer rotor, double-contact intervals"),
-                    _s(RUNDO, "literature", "sec. 4.1.3 contact with clearance")],
+                    _s(RUNDO, "literature", "sec. 4.1.3 contact with clearance, Eq. 24-25"),
+                    _s(IVANOVIC + " Figs. 9a/10a (fixed axes, u = 1.2)", "validation",
+                       "outer-rotor lag x N/(N-1) = inner-gear lag 0.22-0.29 deg reproduced"),
+                    NUMERICS],
         "assumptions": ["A-D3"],
     },
     "ports": {
@@ -61,7 +82,12 @@ METHODS = {
                       "implicit Euler; void volume below p_cav"],
         "sources": [_s(KIM, "literature", "theoretical port edges, chamber pressure model"),
                     _s(GAMEZ, "literature", "theoretical port edges"),
-                    _s(RUNDO, "literature", "lumped chamber pressure model")],
+                    _s(RUNDO, "literature", "lumped chamber pressure model"),
+                    _s("Kim 2006 p. 1629: dp = K dV/V (1 % ~ 17 MPa at K = 1.62 GPa)", "derivation",
+                       "trapped-volume pressure rise = K x swing; the allowed swing / rise is a user criterion "
+                       "(C-TRAPPED, empty)"),
+                    USER("rho, bulk, Cd, pIn, pVap, porting layout, grooveW (if grooves)"),
+                    NUMERICS],
         "assumptions": [],
     },
     "leakage": {
@@ -74,7 +100,8 @@ METHODS = {
         "sources": [_s(RUNDO, "literature", "lumped-parameter chamber network"),
                     _s(KIM, "literature", "chamber pressure model"),
                     _s("Reynolds equation, laminar Poiseuille gap flow (docs/lumped-model.md)", "derivation",
-                       "gap conductances; Couette flow not modelled")],
+                       "gap conductances; Couette flow not modelled"),
+                    USER("nu, axialClr, shaftVent (leakOn)"), NUMERICS],
         "assumptions": [],
     },
     "contact": {
@@ -86,7 +113,10 @@ METHODS = {
                       "v_s = (omega1 / N) |P - I|,  WRPF = p_max v_s"],
         "sources": [_s(RUNDO, "literature", "fluid torques Eqs. 18-19"),
                     _s(JOHNSON, "literature", "Hertz line contact"),
-                    _s("Ivanovic 2020 (after Colbourne)", "literature", "wear-rate proportional factor"),
+                    _s("Ivanovic 2020 (not on the desk; not in Colbourne 1974/1975 or Ivanovic 2021)", "unverified",
+                       "wear-rate proportional factor WRPF = p_max v_s - provenance UNVERIFIED"),
+                    USER("rotor material Ein, nuIn, Eout, nuOut (no 210 GPa / 0.3 fallback)"),
+                    _s(CONVERGENCE + " (rho_eq cap 1e3/1e4/1e5 mm)", "numerical-justified", "A-D8b cap sensitivity"),
                     _s(TOTARO, "literature", "single-contact hypothesis p.4 (A-D8a)")],
         "assumptions": ["A-D8a", "A-D8b"],
     },
@@ -99,7 +129,8 @@ METHODS = {
                       "lateral ring: M = mu pi w (R^4 - r^4) / h",
                       "single-sided: M_c = mu_f q 2 pi/3 (ro^3 - ri^3), q = dp/2"],
         "sources": [_s(TOTARO, "literature", "shaft-torque model, Eqs. (8)-(9) bearing load split"),
-                    _s(GDS_POWER, "literature", "single-sided port Coulomb floor friction")],
+                    _s(GDS_POWER, "literature", "single-sided port Coulomb floor friction"),
+                    USER("nu, rho, axialClr, odClr, jbClr, jbLen, faceMu (single-sided only)"), NUMERICS],
         "assumptions": ["A-D5", "A-D6"],
     },
     "spectrum": {
@@ -119,7 +150,8 @@ METHODS = {
                       "inlet gallery: Re = U D / nu = 2000, n = U A / V_disp",
                       "max speed: bisection on rpm for peak void fraction <= limit (network model)"],
         "sources": [_s(GDS_CAV, "literature", "tip-speed and gallery limits"),
-                    _s(RUNDO, "literature", "void fraction from the chamber network")],
+                    _s(RUNDO, "literature", "void fraction from the chamber network"),
+                    USER("maxSpeed voidLimit, rpmMin, rpmMax, tol (former 0.005 / 100 / 20000 / 10 had no source)")],
         "assumptions": ["A-D2", "A-D4"],
     },
     "operating": {
@@ -137,7 +169,12 @@ METHODS = {
         "equations": ["log10(log10(nu + 0.7)) = A - B log10(T[K]) (nu >= 2 cSt)",
                       "rho(T) = rho15 (1 - 6.5e-4 (T - 15))"],
         "sources": [_s("ASTM D341 (Ubbelohde-Walther)", "standard", "viscosity-temperature relation"),
-                    _s("linear thermal expansion, coefficient 6.5e-4 1/K", "derivation", "density")],
+                    _s("ISO 3448 viscosity grades (clause not verified)", "standard", "ISO VG nu40 = grade midpoint"),
+                    _s("OILS nu100, rho15 and all non-ISO-VG rows (fluid.OILS source tags)", "unsourced",
+                       "using a library oil marks the report NOT FOR CERTIFICATION until "
+                       "References/Oil-Datasheets/sources.md cites it (fluid.load_sources)"),
+                    _s("UNEXPLAINED: linear thermal expansion coefficient 6.5e-4 1/K has no documented source or "
+                      "derivation yet (audit R02)", "unsourced", "density")],
         "assumptions": [],
     },
     "reverse": {
@@ -151,6 +188,27 @@ METHODS = {
     },
 }
 
+METHODS["acceptance"] = {
+    "module": _criteria, "functions": ("evaluate", "effective", "quantity_values", "neutralize_checks"),
+    "method": "Acceptance-criteria evaluation (authority-independent profiles, user limits, overrides)",
+    "equations": ["'<=': allowable = limit / S, margin = (allowable - x) / allowable",
+                  "'>=': required = limit S, margin = (x - required) / required",
+                  "'range': margin = min(x - min, max - x) / (max - min)",
+                  "governing case = min margin over load cases; overall = FAIL | PASS (all enabled PASS) | INCOMPLETE",
+                  "Hertz validity a / rho_eq = 2 p_max / E*  (from p_max = 2F/(pi a b), p_max^2 = F E*/(pi b rho_eq))",
+                  "no undercut: rp + c < rho_min (offset of the epitrochoid stays cusp-free)"],
+    "sources": [_s("production-expert acceptance-criteria model 2026-10-31 (company report)", "derivation",
+                   "criteria structure, status rules; no limit values shipped"),
+                _s("ISO 6336-5:2016 (catalogue level only, not read)", "standard",
+                   "analogy only: allowable = limit stress number / S (A-AC1)"),
+                _s(JOHNSON, "literature", "Hertz line-contact relations used for a / rho_eq"),
+                _s(COLBOURNE + " Eq. 9-11; " + BONANDRINI + " Eq. 7", "literature",
+                   "hard undercut limit rp + c < rho_min (C-UNDERCUT); the 0.85 sharp-tip factor is NOT sourced "
+                   "and stays an empty user criterion (C-TIP-SHARP)"),
+                _s("Kim 2006 p. 1629 (dp = K dV/V)", "derivation",
+                   "trapped-volume swing -> pressure rise route for C-TRAPPED; limit stays an empty user criterion")],
+    "assumptions": ["A-AC1"],
+}
 
 # Named assumptions (single source of truth for the report and the UI, served by GET /api/methods).
 # id -> name, settings.variants switch (None = fixed), statement, variants {value: meaning}, sources.
@@ -179,15 +237,26 @@ ASSUMPTION_REGISTRY = {
              "variants": {None: "symmetric W/2 per bearing", "object": "{l1, l2, L1, L2} lever-arm split"},
              "sources": [_s(TOTARO, "literature", "Eqs. (8)-(9) bearing load split")]},
     "A-D7": {"name": "LAMBDA_IVANOVIC", "switch": "lambdaConvention",
-             "statement": "lambda = R/(N e); Gamez uses the inverse.",
+             "statement": "lambda = R/(N e) (settled: Ivanovic = Bonandrini alpha3 = Colbourne b/(e m)); "
+                          "Gamez uses the inverse.",
              "variants": {"ivanovic": "lambda = R/(N e)", "gamez": "lambda_G = N e / R (label only)"},
-             "sources": [_s(IVANOVIC, "literature", "lambda definition"), _s(GAMEZ, "literature", "Eq.(3) inverse")]},
+             "settled": "SETTLED 2026-10-31: Ivanovic lambda = Bonandrini alpha3 = Colbourne b/(e m) (three sources)",
+             "sources": [_s(IVANOVIC, "literature", "lambda definition"), _s(GAMEZ, "literature", "Eq.(3) inverse"),
+                         _s(BONANDRINI, "literature", "alpha3 = (a/e)/N = R/(N e), p. 1474"),
+                         _s(COLBOURNE, "literature", "b/(e m) > 1, p. 220")]},
     "A-D8a": {"name": "HERTZ_SINGLE_LOBE", "switch": None,
               "statement": "Whole balancing force on one lobe (conservative in double contact).",
               "variants": {}, "sources": [_s(TOTARO, "literature", "single-contact hypothesis p.4")]},
     "A-D8b": {"name": "HERTZ_CONFORMAL_CAP", "switch": None,
               "statement": "rho_eq capped at 1e4 mm; Hertz validity a/rho reported, not enforced.",
-              "variants": {}, "sources": [_s(JOHNSON, "literature", "Hertz line contact, validity a << rho")]},
+              "variants": {}, "sources": [_s(JOHNSON, "literature", "Hertz line contact, validity a << rho"),
+                                          _s(CONVERGENCE, "numerical-justified", "cap sensitivity 1e3-1e5 mm")]},
+    "A-AC1": {"name": "HERTZ_GEAR_ANALOGY", "switch": None,
+              "statement": "Gerotor 2-D Hertz peak pressure is compared with a gear contact limit stress "
+                           "(ISO 6336-5 style allowable = sigma_Hlim / S). Modelling analogy: ISO 6336 covers "
+                           "involute gears, not gerotor profiles; no allowable value is shipped.",
+              "variants": {}, "sources": [_s("ISO 6336-5:2016 (catalogue level only, not read)", "standard",
+                                             "concept of limit stress number / safety factor")]},
 }
 
 

@@ -15,7 +15,7 @@ import jsonschema
 from .serialize import sha256
 
 SCHEMA_DIR = pathlib.Path(__file__).resolve().parents[1] / "schema"
-CURRENT = 3
+CURRENT = 4
 SCHEMA_ID = f"gerotor-project/{CURRENT}"
 _SCHEMA = json.loads((SCHEMA_DIR / "project.schema.json").read_text(encoding="utf-8"))
 _VALIDATOR = jsonschema.Draft202012Validator(_SCHEMA)
@@ -101,7 +101,32 @@ def _v2_to_v3(doc: dict) -> dict:
     return doc
 
 
-MIGRATIONS = {0: _v0_to_v1, 1: _v1_to_v2, 2: _v2_to_v3}
+def _v3_to_v4(doc: dict) -> dict:
+    """v3 -> v4: placeholder settings.acceptanceCriteria {authority, status, criteria[]} -> criteria
+    model (api/criteria.py). authority string -> authority.name; old criteria rows -> customCriteria
+    with profile "customer-defined" (their limits were user inputs; source text kept as label).
+    Absent block stays absent (defaults apply). The input hash changes (settings are hashed).
+    """
+    doc = dict(doc, schema="gerotor-project/4")
+    s = dict(doc.get("settings") or {})
+    old = s.get("acceptanceCriteria")
+    if isinstance(old, dict) and "schemaVersion" not in old:
+        crit = []
+        for c in old.get("criteria") or []:
+            row = {k: c[k] for k in ("id", "quantity", "comparison", "limit", "unit") if k in c}
+            row["source"] = {"label": str(c.get("source") or "migrated from gerotor-project/3"),
+                             "doc": None, "clause": None, "verified": False}
+            crit.append(row)
+        s["acceptanceCriteria"] = {"schemaVersion": 1,
+                                   "activeProfileId": "customer-defined" if crit else "generic",
+                                   "authority": {"name": old.get("authority"), "document": None, "edition": None},
+                                   "materials": {"inner": None, "outer": None}, "overrides": [],
+                                   "customCriteria": crit}
+        doc["settings"] = s
+    return doc
+
+
+MIGRATIONS = {0: _v0_to_v1, 1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
 
 
 def derived_porting(design: dict) -> dict:
@@ -151,6 +176,14 @@ def input_hash(doc: dict) -> str:
     and 3 hash equal and 1e-5 is written "0.00001" - identical to the frontend (shared contract).
     """
     return sha256({k: doc.get(k) for k in HASHED_KEYS if doc.get(k) not in (None, [], {})})
+
+
+def resolved_hash(resolved: dict) -> str:
+    """SHA-256 (JCS) of calc.resolved_inputs: covers every value used by the calculation (converted
+    units, applied settings defaults, structural switches, derived design, per-case fluid values,
+    oil-library row). Reported as ``inputHash`` by /api/calc and the report; ``input_hash`` (the
+    document hash shared with frontend/js/project.js) is reported as ``documentHash``."""
+    return sha256({"resolved": resolved})
 
 
 def results_stale(doc: dict) -> bool:

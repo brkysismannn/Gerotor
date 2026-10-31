@@ -11,9 +11,10 @@ from api import project as P
 _ROOT = pathlib.Path(__file__).resolve().parents[3]
 JS = _ROOT / "frontend" / "js"
 TESTS = _ROOT / "frontend" / "tests"
-FILES = ["geometry.js", "ports.js", "backlash.js", "leakage.js", "contact.js", "friction.js", "perfmap.js", "reverse.js",
-         "fluid.js", "spectrum.js", "assist.js", "export.js", "xlsx.js", "modelica.js", "drawing.js", "step.js",
-         "project.js", "methods.generated.js", "report.js"]
+# Non-DOM scripts of frontend/index.html in its load order (render/charts/app/*-ui/workspace need a DOM).
+FILES = ["numinput.js", "geometry.js", "ports.js", "backlash.js", "leakage.js", "contact.js", "friction.js", "perfmap.js",
+         "reverse.js", "fluid.js", "spectrum.js", "assist.js", "xlsx.js", "modelica.js", "drawing.js", "step.js",
+         "export.js", "project.js", "methods.generated.js", "criteria.generated.js", "criteria.js", "report.js"]
 PRE = r"""var window=globalThis; var performance={now:()=>0};
 if(typeof TextEncoder==='undefined'){globalThis.TextEncoder=class{encode(s){const u=unescape(encodeURIComponent(s));const a=new Uint8Array(u.length);for(let i=0;i<u.length;i++)a[i]=u.charCodeAt(i);return a;}};}
 """
@@ -56,8 +57,7 @@ def save_doc(ctx, design, cases=None):
 def test_saved_file_validates_and_hash_matches(ctx, name):
     doc, h = save_doc(ctx, DESIGNS[name], [dict(name="A", rpm=1000, dp=20, oilT=40, pIn=1), dict(name="B", rpm=3000, dp=80, oilT=80, pIn=0.8)])
     assert P.load(doc)  # backend: older UI files still load (migration)
-    if doc.get("schema") != P.SCHEMA_ID:
-        pytest.xfail(f"FRONTEND-SCHEMA3: UI writes {doc.get('schema')}, contract is {P.SCHEMA_ID}")
+    assert doc.get("schema") == P.SCHEMA_ID  # FRONTEND-SCHEMA3 fixed: the UI writes the current schema
     assert P.validate(doc) == []
     assert h == P.input_hash(doc)
 
@@ -65,8 +65,7 @@ def test_saved_file_validates_and_hash_matches(ctx, name):
 def test_hash_exponent_float(ctx):
     doc, h = save_doc(ctx, DESIGNS["tiny"])
     assert P.load(doc)
-    if doc.get("schema") != P.SCHEMA_ID:
-        pytest.xfail("FRONTEND-SCHEMA3: hash payload layout differs until the UI writes /3")
+    assert doc.get("schema") == P.SCHEMA_ID  # FRONTEND-SCHEMA3 fixed
     assert h == P.input_hash(doc)  # R-P2 backend side: JCS writes 1e-5 as 0.00001 like JS
 
 
@@ -97,7 +96,7 @@ def test_face_support_matches_core(ctx):
                 d = dict(BASE, dblIn=di, dblOut=do, shadow=sh)
                 doc, _ = save_doc(ctx, d)
                 core = js(ctx, f"Gerotor.derive({json.dumps(d)}).faceSupport")
-                if doc.get("schema") == P.SCHEMA_ID:
+                if P.version_of(doc) >= 3:  # /3+ drops derived porting keys
                     assert "faceSupport" not in doc["design"] and "doubleFill" not in doc["design"]
                     continue
                 if doc["design"]["faceSupport"] != core:
@@ -143,5 +142,4 @@ def test_frontend_suite_counts(ctx):
     fails = js(ctx, "Gerotor.tests.runAll().results.filter(r=>r.status==='fail').map(r=>r.name)")
     # DOMParser / TextDecoder are browser APIs absent in bare V8: environment, not code
     real = [n for n in fails if not ("DOMParser" in n or "TextDecoder" in n)]
-    if real:  # frontend round-3 work in progress (fullstack engineer), not a backend item
-        pytest.xfail(f"FRONTEND-SUITE: frontend self-tests failing in V8: {real}")
+    assert not real, f"frontend self-tests failing in V8: {real}"  # FRONTEND-SUITE fixed (all index.html scripts loaded)

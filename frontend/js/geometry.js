@@ -187,10 +187,12 @@
     L.filletCentre = F;
   }
 
-  function filletPoints(p, L, k, which, n) {
+  // ends = true: i = 0 ... n-1 (arc end points included; fillet-clearance minimum, exact for any n >= 3, mirrors gerotor_core
+  // FILLET_ENDS); false: i = 1 ... n-2 (profile building leaves the end points to the neighbouring profile pieces).
+  function filletPoints(p, L, k, which, n, ends) {
     if (!L.fillets) return [];
     const f = L.fillets[which], th = TAU * k / p.N, pts = [];
-    for (let i = 1; i < n - 1; i++) {
+    for (let i = ends ? 0 : 1; i < (ends ? n : n - 1); i++) {
       const a = f.a0 + f.d * i / (n - 1);
       pts.push(rot([f.c[0] + p.fillet * Math.cos(a), f.c[1] + p.fillet * Math.sin(a)], th));
     }
@@ -330,7 +332,7 @@
       while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ang[m] <= a) lo = m; else hi = m; }
       return rad[lo] + (rad[hi] - rad[lo]) * (a - ang[lo]) / (ang[hi] - ang[lo]);
     };
-    const pts = [...filletPoints(p, L, 0, 0, 14), ...filletPoints(p, L, 0, 1, 14)];
+    const pts = [...filletPoints(p, L, 0, 0, 14, true), ...filletPoints(p, L, 0, 1, 14, true)];
     let worst = Infinity;
     const M = p.N * 64;
     for (let j = 0; j < M; j++) {
@@ -429,7 +431,9 @@
   function analyse(p, opts) {
     opts = opts || {};
     const res = { valid: false, checks: [] };
-    const push = (level, title, detail) => res.checks.push({ level, title, detail });
+    // `criterion`: id of the acceptance criterion that owns the limit (js/criteria.js). Verdicts that rested on an
+    // unsourced threshold are not issued; they are info rows "... - NOT EVALUATED" (owner rule no-unexplained-numbers).
+    const push = (level, title, detail, criterion) => res.checks.push(criterion ? { level, title, detail, criterion } : { level, title, detail });
     const f = (x, d = 2) => Number.isFinite(x) ? x.toFixed(d) : '—';
 
     if (!(Number.isInteger(p.N) && p.N >= 3)) {
@@ -464,10 +468,9 @@
     const off = p.rp + p.c;
     if (off >= res.rhoMin) {
       push('err', 'Inner rotor undercut', `rp + c (${f(off)}) ≥ minimum trochoid radius of curvature ρmin (${f(res.rhoMin)}). Tooth tips self-intersect.`);
-    } else if (off > 0.85 * res.rhoMin) {
-      push('warn', 'Sharp inner rotor tips', `(rp + c) / ρmin = ${f(off / res.rhoMin, 3)}. Tips become sharp; wear and stress risk.`);
     } else {
-      push('ok', 'No undercut', `(rp + c) / ρmin = ${f(off / res.rhoMin, 3)}.`);
+      push('ok', 'No undercut', `rp + c < ρmin (offset curve has no cusp).`);
+      push('info', 'Sharp inner rotor tips - NOT EVALUATED', `Tip sharpness (rp + c) / ρmin = ${f(off / res.rhoMin, 3)}; the former 0.85 threshold had no documented source. Enter a limit in criterion C-TIP-SHARP.`, 'C-TIP-SHARP');
     }
 
     // Outer rotor valley.
@@ -485,20 +488,18 @@
     // Walls.
     const outerWall = p.OD / 2 - p.Rv;
     if (outerWall <= 0) push('err', 'No outer rotor wall', `OD (${f(p.OD)}) must exceed 2·Rv.`);
-    else if (outerWall < 0.1 * p.R) push('warn', 'Thin outer rotor wall', `Min. wall ≈ ${f(outerWall)} mm.`);
-    else push('ok', 'Outer rotor wall', `Min. wall ≈ ${f(outerWall)} mm.`);
+    else push('info', 'Outer rotor wall - NOT EVALUATED', `Min. wall ≈ ${f(outerWall)} mm (${f(outerWall / p.R, 3)} R); the former 0.1 R threshold had no documented source. Enter a limit in criterion C-WALL-OUTER.`, 'C-WALL-OUTER');
 
     const innerWall = p.innerRoot - p.bore / 2;
     if (innerWall <= 0) push('err', 'Bore cuts tooth roots', `Bore radius must be < root radius (${f(p.innerRoot)}).`);
-    else if (innerWall < 0.15 * p.innerRoot) push('warn', 'Thin inner rotor wall', `Root − bore = ${f(innerWall)} mm.`);
-    else push('ok', 'Inner rotor wall', `Root − bore = ${f(innerWall)} mm.`);
+    else push('info', 'Inner rotor wall - NOT EVALUATED', `Root − bore = ${f(innerWall)} mm (${f(innerWall / p.innerRoot, 3)} of root radius); the former 0.15 threshold had no documented source. Enter a limit in criterion C-WALL-INNER.`, 'C-WALL-INNER');
 
     if (p.c < 0) push('err', 'Negative clearance', 'Profile clearance c must be ≥ 0.');
 
-    // Inner rotor tip speed (Gamez-Montero: keep below 15 m/s for good filling).
+    // Inner rotor tip speed v = omega r_tip. The former 15 m/s verdict is removed (the 15 m/s quoted from Gamez-Montero is
+    // an unverified clause); the limit is the user's criterion C-TIP-SPEED.
     res.tipSpeed = p.rpm * TAU / 60 * p.innerTip / 1000;
-    if (res.tipSpeed > 15) push('warn', 'High tip speed', `Inner rotor tip speed ${f(res.tipSpeed, 1)} m/s > 15 m/s; chamber filling may suffer.`);
-    else push('ok', 'Tip speed', `Inner rotor tip speed ${f(res.tipSpeed, 1)} m/s (limit 15 m/s).`);
+    push('info', 'Tip speed - NOT EVALUATED', `Inner rotor tip speed ${f(res.tipSpeed, 1)} m/s; no limit entered in criterion C-TIP-SPEED.`, 'C-TIP-SPEED');
 
     // Chamber area and its exact derivative over one outer-rotor revolution.
     // Fast mode: contacts and dA/dt only (no areas, no polygons).

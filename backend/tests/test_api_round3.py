@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import gerotor_core as G
+import examples as X  # example inputs (tests only)
 from api import calc, project
 from api.app import app
 from api.methods import ASSUMPTION_REGISTRY, METHODS
@@ -47,7 +48,7 @@ def test_hash_is_sha256_of_jcs_utf8():
 
 
 def test_example_is_v3_and_valid():
-    assert EXAMPLE["schema"] == project.SCHEMA_ID == "gerotor-project/3"
+    assert EXAMPLE["schema"] == project.SCHEMA_ID == "gerotor-project/4"
     assert project.validate(EXAMPLE) == []
 
 
@@ -64,10 +65,10 @@ def test_v2_migration_moves_fluid_and_derives_porting():
 @pytest.mark.parametrize("fs,df", [("single", False), ("balanced", False), ("balanced", True)])
 def test_migration_preserves_core_porting(fs, df):
     base = dict(N=7, e=3, R=30, rp=8, b=20, c=0.03)
-    old = G.design(**base, faceSupport=fs, doubleFill=df)
+    old = X.design(**base, faceSupport=fs, doubleFill=df)
     d = project.migrate({"schema": "gerotor-project/2", "metadata": {"projectName": "x"},
                          "design": dict(base, faceSupport=fs, doubleFill=df)})["design"]
-    new = G.design(**d)
+    new = X.design(**d)
     assert [old[k] for k in ("faceSupport", "fillS", "fillD")] == [new[k] for k in ("faceSupport", "fillS", "fillD")]
 
 
@@ -75,7 +76,7 @@ def test_derived_porting_equals_core_rule():
     for di in (False, True):
         for do in (False, True):
             for sh in (False, True):
-                q = G.design(N=7, e=3, R=30, rp=8, b=20, c=0.03, dblIn=di, dblOut=do, shadow=sh)
+                q = X.design(N=7, e=3, R=30, rp=8, b=20, c=0.03, dblIn=di, dblOut=do, shadow=sh)
                 r = project.derived_porting({"dblIn": di, "dblOut": do, "shadow": sh})
                 assert all(r[k] == q[k] for k in r)
 

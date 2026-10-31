@@ -2,63 +2,278 @@
 (function (G) { G.methodsData = {
  "assumptions": [
   {
+   "active": "p_in - p_vap (inlet pressure of the case)",
    "default": "inlet",
    "id": "A-D2",
+   "literatureVariant": false,
    "name": "CAV_HEAD_INLET",
+   "sources": [
+    {
+     "kind": "literature",
+     "ref": "GDS 2017, Calculation of Cavitation Limits",
+     "use": "'atm' variant, tip-speed and gallery limits"
+    },
+    {
+     "kind": "derivation",
+     "ref": "Bernoulli at the inlet with the actual inlet pressure (in-house)",
+     "use": "'inlet' default"
+    }
+   ],
+   "statement": "Available cavitation head p_in - p_vap; 'atm' = GDS p_atm - p_vap.",
    "switch": "cavHead",
-   "text": "Available cavitation head p_in - p_vap; 'atm' = GDS p_atm - p_vap."
+   "text": "Available cavitation head p_in - p_vap; 'atm' = GDS p_atm - p_vap.",
+   "usedBy": [
+    "cavitation"
+   ],
+   "value": "inlet",
+   "variants": [
+    {
+     "meaning": "p_in - p_vap (inlet pressure of the case)",
+     "value": "inlet"
+    },
+    {
+     "meaning": "GDS: p_atm - p_vap",
+     "value": "atm"
+    }
+   ]
   },
   {
+   "active": "design.c = eps",
    "default": "equidistance",
    "id": "A-D3",
+   "literatureVariant": false,
    "name": "C_EQUIDISTANCE",
+   "sources": [
+    {
+     "kind": "literature",
+     "ref": "Ivanovic et al. 2012",
+     "use": "equidistance eps Eq.(9), R = lam z e, rp = c e"
+    }
+   ],
+   "statement": "c is the profile equidistance (Ivanovic eps); peak tip gap ~ 2c.",
    "switch": "clearanceInput",
-   "text": "c is the profile equidistance (Ivanovic eps); peak tip gap ~ 2c."
+   "text": "c is the profile equidistance (Ivanovic eps); peak tip gap ~ 2c.",
+   "usedBy": [
+    "geometry",
+    "backlash",
+    "reverse"
+   ],
+   "value": "equidistance",
+   "variants": [
+    {
+     "meaning": "design.c = eps",
+     "value": "equidistance"
+    },
+    {
+     "meaning": "design.c = peak tip gap, converted to eps",
+     "value": "peakGap"
+    }
+   ]
   },
   {
+   "active": "suction area x fillS (fillS = 2 if dblIn)",
    "default": true,
    "id": "A-D4",
+   "literatureVariant": false,
    "name": "CAV_AREA_DOUBLE_FILL",
+   "sources": [
+    {
+     "kind": "literature",
+     "ref": "GDS 2017, Calculation of Cavitation Limits",
+     "use": "inlet gallery Re = 2000 limit, single port area"
+    }
+   ],
+   "statement": "Gallery area = suction-port area x fillS; false = GDS single port.",
    "switch": "cavAreaDoubleFill",
-   "text": "Gallery area = suction-port area x fillS; false = GDS single port."
+   "text": "Gallery area = suction-port area x fillS; false = GDS single port.",
+   "usedBy": [
+    "cavitation"
+   ],
+   "value": true,
+   "variants": [
+    {
+     "meaning": "suction area x fillS (fillS = 2 if dblIn)",
+     "value": true
+    },
+    {
+     "meaning": "GDS single-port area",
+     "value": false
+    }
+   ]
   },
   {
+   "active": "inputs diametral",
    "default": "diametral",
    "id": "A-D5",
+   "literatureVariant": false,
    "name": "OD_CLEARANCE_DIAMETRAL",
+   "sources": [
+    {
+     "kind": "literature",
+     "ref": "Totaro, Zardin & Borghi 2025, Evaluation of a simple method to estimate the shaft torque in a gerotor pump",
+     "use": "outer-rotor radial and journal viscous torque model"
+    },
+    {
+     "kind": "derivation",
+     "ref": "Ocvirk short-bearing solution (textbook)",
+     "use": "radial clearance = diametral/2"
+    }
+   ],
+   "statement": "odClr, jbClr diametral; Ocvirk uses radial = half.",
    "switch": "clearanceConvention",
-   "text": "odClr, jbClr diametral; Ocvirk uses radial = half."
+   "text": "odClr, jbClr diametral; Ocvirk uses radial = half.",
+   "usedBy": [
+    "friction",
+    "operating"
+   ],
+   "value": "diametral",
+   "variants": [
+    {
+     "meaning": "inputs diametral",
+     "value": "diametral"
+    },
+    {
+     "meaning": "inputs radial, doubled internally",
+     "value": "radial"
+    }
+   ]
   },
   {
+   "active": "symmetric W/2 per bearing",
    "default": null,
    "id": "A-D6",
+   "literatureVariant": false,
    "name": "JOURNAL_SYMMETRIC",
+   "sources": [
+    {
+     "kind": "literature",
+     "ref": "Totaro, Zardin & Borghi 2025, Evaluation of a simple method to estimate the shaft torque in a gerotor pump",
+     "use": "Eqs. (8)-(9) bearing load split"
+    }
+   ],
+   "statement": "W/2 per bearing; object = Totaro Eq.(8)-(9) lever-arm split.",
    "switch": "journal",
-   "text": "W/2 per bearing; object = Totaro Eq.(8)-(9) lever-arm split."
+   "text": "W/2 per bearing; object = Totaro Eq.(8)-(9) lever-arm split.",
+   "usedBy": [
+    "friction",
+    "operating"
+   ],
+   "value": null,
+   "variants": [
+    {
+     "meaning": "symmetric W/2 per bearing",
+     "value": null
+    },
+    {
+     "meaning": "{l1, l2, L1, L2} lever-arm split",
+     "value": "object"
+    }
+   ]
   },
   {
+   "active": "lambda = R/(N e)",
    "default": "ivanovic",
    "id": "A-D7",
+   "literatureVariant": false,
    "name": "LAMBDA_IVANOVIC",
+   "sources": [
+    {
+     "kind": "literature",
+     "ref": "Ivanovic et al. 2012",
+     "use": "lambda definition"
+    },
+    {
+     "kind": "literature",
+     "ref": "Gamez-Montero et al. (gerotor design review)",
+     "use": "Eq.(3) inverse"
+    }
+   ],
+   "statement": "lambda = R/(N e); Gamez uses the inverse.",
    "switch": "lambdaConvention",
-   "text": "lambda = R/(N e); Gamez uses the inverse."
+   "text": "lambda = R/(N e); Gamez uses the inverse.",
+   "usedBy": [
+    "geometry"
+   ],
+   "value": "ivanovic",
+   "variants": [
+    {
+     "meaning": "lambda = R/(N e)",
+     "value": "ivanovic"
+    },
+    {
+     "meaning": "lambda_G = N e / R (label only)",
+     "value": "gamez"
+    }
+   ]
   },
   {
+   "active": "fixed",
    "default": null,
    "id": "A-D8a",
+   "literatureVariant": false,
    "name": "HERTZ_SINGLE_LOBE",
+   "sources": [
+    {
+     "kind": "literature",
+     "ref": "Totaro, Zardin & Borghi 2025, Evaluation of a simple method to estimate the shaft torque in a gerotor pump",
+     "use": "single-contact hypothesis p.4"
+    }
+   ],
+   "statement": "Whole balancing force on one lobe (conservative in double contact).",
    "switch": null,
-   "text": "Whole balancing force on one lobe (conservative in double contact)."
+   "text": "Whole balancing force on one lobe (conservative in double contact).",
+   "usedBy": [
+    "contact"
+   ],
+   "value": null,
+   "variants": []
   },
   {
+   "active": "fixed",
    "default": null,
    "id": "A-D8b",
+   "literatureVariant": false,
    "name": "HERTZ_CONFORMAL_CAP",
+   "sources": [
+    {
+     "kind": "literature",
+     "ref": "Johnson, Contact Mechanics (Hertz line contact)",
+     "use": "Hertz line contact, validity a << rho"
+    }
+   ],
+   "statement": "rho_eq capped at 1e4 mm; Hertz validity a/rho reported, not enforced.",
    "switch": null,
-   "text": "rho_eq capped at 1e4 mm; Hertz validity a/rho reported, not enforced."
+   "text": "rho_eq capped at 1e4 mm; Hertz validity a/rho reported, not enforced.",
+   "usedBy": [
+    "contact"
+   ],
+   "value": null,
+   "variants": []
+  },
+  {
+   "active": "fixed",
+   "default": null,
+   "id": "A-AC1",
+   "literatureVariant": false,
+   "name": "HERTZ_GEAR_ANALOGY",
+   "sources": [
+    {
+     "kind": "standard",
+     "ref": "ISO 6336-5:2016 (catalogue level only, not read)",
+     "use": "concept of limit stress number / safety factor"
+    }
+   ],
+   "statement": "Gerotor 2-D Hertz peak pressure is compared with a gear contact limit stress (ISO 6336-5 style allowable = sigma_Hlim / S). Modelling analogy: ISO 6336 covers involute gears, not gerotor profiles; no allowable value is shipped.",
+   "switch": null,
+   "text": "Gerotor 2-D Hertz peak pressure is compared with a gear contact limit stress (ISO 6336-5 style allowable = sigma_Hlim / S). Modelling analogy: ISO 6336 covers involute gears, not gerotor profiles; no allowable value is shipped.",
+   "usedBy": [
+    "acceptance"
+   ],
+   "value": null,
+   "variants": []
   }
  ],
- "backendGit": "3ab9e06",
+ "backendGit": "1a61bb2",
  "methods": [
   {
    "assumptions": [
@@ -366,7 +581,7 @@
    "module": "gerotor_core.fluid",
    "references": [
     "ASTM D341 (Ubbelohde-Walther)",
-    "linear thermal expansion, coefficient 6.5e-4 1/K"
+    "UNEXPLAINED: linear thermal expansion coefficient 6.5e-4 1/K has no documented source or derivation yet (audit R02)"
    ],
    "sources": [
     {
@@ -375,8 +590,8 @@
      "use": "viscosity-temperature relation"
     },
     {
-     "kind": "derivation",
-     "ref": "linear thermal expansion, coefficient 6.5e-4 1/K",
+     "kind": "unsourced",
+     "ref": "UNEXPLAINED: linear thermal expansion coefficient 6.5e-4 1/K has no documented source or derivation yet (audit R02)",
      "use": "density"
     }
    ],
@@ -410,7 +625,70 @@
     }
    ],
    "summary": "Reverse engineering from measured diameters (port of js/reverse.js)."
+  },
+  {
+   "assumptions": [
+    "A-AC1"
+   ],
+   "equations": [
+    "'<=': allowable = limit / S, margin = (allowable - x) / allowable",
+    "'>=': required = limit S, margin = (x - required) / required",
+    "'range': margin = min(x - min, max - x) / (max - min)",
+    "governing case = min margin over load cases; overall = FAIL | PASS (all enabled PASS) | INCOMPLETE",
+    "Hertz validity a / rho_eq = 2 p_max / E*  (from p_max = 2F/(pi a b), p_max^2 = F E*/(pi b rho_eq))",
+    "no undercut: rp + c < rho_min (offset of the epitrochoid stays cusp-free)"
+   ],
+   "id": "acceptance",
+   "method": "Acceptance-criteria evaluation (authority-independent profiles, user limits, overrides)",
+   "module": "api.criteria",
+   "references": [
+    "production-expert acceptance-criteria model 2026-10-31 (company report)",
+    "ISO 6336-5:2016 (catalogue level only, not read)",
+    "Johnson, Contact Mechanics (Hertz line contact)"
+   ],
+   "sources": [
+    {
+     "kind": "derivation",
+     "ref": "production-expert acceptance-criteria model 2026-10-31 (company report)",
+     "use": "criteria structure, status rules; no limit values shipped"
+    },
+    {
+     "kind": "standard",
+     "ref": "ISO 6336-5:2016 (catalogue level only, not read)",
+     "use": "analogy only: allowable = limit stress number / S (A-AC1)"
+    },
+    {
+     "kind": "literature",
+     "ref": "Johnson, Contact Mechanics (Hertz line contact)",
+     "use": "Hertz line-contact relations used for a / rho_eq"
+    }
+   ],
+   "summary": "Authority-independent acceptance criteria: profiles, material library, overrides, evaluation."
   }
  ],
- "source": "in-process api.report (endpoint not reachable)"
+ "projectSchema": "gerotor-project/4",
+ "software": {
+  "api": "0.2.0",
+  "gerotor_core": "0.1.0",
+  "git": "1a61bb2",
+  "numpy": "2.5.4",
+  "python": "3.15.2"
+ },
+ "source": "GET http://127.0.0.1:8770/api/methods",
+ "variantDefaults": {
+  "cavAreaDoubleFill": true,
+  "cavHead": "inlet",
+  "clearanceConvention": "diametral",
+  "clearanceInput": "equidistance",
+  "journal": null,
+  "lambdaConvention": "ivanovic"
+ },
+ "variants": {
+  "cavAreaDoubleFill": true,
+  "cavHead": "inlet",
+  "clearanceConvention": "diametral",
+  "clearanceInput": "equidistance",
+  "journal": null,
+  "lambdaConvention": "ivanovic"
+ }
 }; })(window.Gerotor = window.Gerotor || {});

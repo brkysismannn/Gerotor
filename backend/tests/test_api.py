@@ -10,7 +10,8 @@ from fastapi.testclient import TestClient
 
 from api import calc, project, report
 from api.app import app
-from gerotor_core import geometry as g, design as core_design, perfmap
+from gerotor_core import geometry as g, perfmap
+from examples import design as core_design
 
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 EXAMPLE = json.loads((BACKEND / "schema" / "example.project.json").read_text(encoding="utf-8"))
@@ -29,7 +30,7 @@ def test_health():
     r = client.get("/api/health")
     assert r.status_code == 200
     j = r.json()
-    assert j["status"] == "ok" and j["version"] and "git" in j and j["projectSchema"] == "gerotor-project/3"
+    assert j["status"] == "ok" and j["version"] and "git" in j and j["projectSchema"] == "gerotor-project/4"
 
 
 def test_example_project_valid():
@@ -48,7 +49,7 @@ def test_schema_rejects_bad_project():
 
 def test_migration_v0_bare_design():
     doc = project.migrate(dict(REF["params"], name="old"))
-    assert doc["schema"] == "gerotor-project/3" and doc["metadata"]["projectName"] == "old"
+    assert doc["schema"] == "gerotor-project/4" and doc["metadata"]["projectName"] == "old"
     assert project.validate(doc) == []
     with pytest.raises(project.ProjectError):
         project.migrate({"schema": "gerotor-project/99"})
@@ -133,7 +134,8 @@ def test_variants_change_results():
 def test_operating_point_matches_core():
     d = small()
     out = calc.run(d, ["operating"])
-    p = calc.build_design(d["design"], calc.VARIANT_DEFAULTS)
+    inputs, _s, v, _o, _m = calc.split_request(d)  # design + fluid (no defaults in the backend)
+    p = calc.build_design(inputs, v)
     res = g.analyse(p, samples=16)
     ref = perfmap.operating_point(p, res, 1500.0, 100.0)
     assert out["operating"][0]["etaT"] == pytest.approx(ref["etaT"], rel=1e-12)
@@ -145,7 +147,8 @@ def test_report_data_deterministic():
     a = report.build(project.load(d), now=t)
     b = report.build(project.load(d), now=t)
     assert json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
-    assert a["inputHash"] == project.input_hash(d)
+    assert a["documentHash"] == project.input_hash(d)
+    assert a["inputHash"] == project.resolved_hash(calc.resolved_inputs(project.load(d)))
     assert a["software"]["gerotor_core"] and a["metadata"]["partNo"] == "GP-0007"
     ids = [x["id"] for x in a["assumptions"]]
     assert ids[:6] == ["A-D2", "A-D3", "A-D4", "A-D5", "A-D6", "A-D7"]

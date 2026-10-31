@@ -9,13 +9,17 @@ import numpy as np
 
 
 def to_json(x, arrays: bool = True):
-    """Recursively convert to JSON types. ``arrays=False`` drops numpy arrays and long lists (> 64)."""
+    """Recursively convert to JSON types. ``arrays=False`` drops numpy arrays and long lists (> 64)
+    and lists each dropped key in "_omitted" [{key, length, reason}] (no silent truncation)."""
     if isinstance(x, dict):
         out = {}
         for k, v in x.items():
             if callable(v):
                 continue
-            if not arrays and _is_bulk(v):
+            if not arrays and _is_bulk(v):  # never silent: record what was left out
+                out.setdefault("_omitted", []).append(
+                    {"key": str(k), "length": int(len(v)), "reason": "bulk array omitted (arrays=false); "
+                     "full data via /api/calc with arrays=true"})
                 continue
             out[str(k)] = to_json(v, arrays)
         return out

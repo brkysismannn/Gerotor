@@ -17,10 +17,10 @@ import numpy as np
 
 import gerotor_core
 
-from . import cache, calc
+from . import cache, calc, criteria
 from . import methods as _methods
 from .methods import ASSUMPTION_REGISTRY, METHODS
-from .project import input_hash
+from .project import input_hash, resolved_hash
 from .serialize import to_json
 
 API_VERSION = "0.2.0"
@@ -65,10 +65,11 @@ def methods() -> list[dict]:
 
 
 def _checks(checks):
-    out = {"errors": [], "warnings": [], "info": []}
+    out = {"errors": [], "warnings": [], "info": [], "missing": []}
     for c in checks or []:
         lvl = c.get("level")
-        out["errors" if lvl == "err" else "warnings" if lvl == "warn" else "info"].append(to_json(c))
+        out["errors" if lvl == "err" else "warnings" if lvl == "warn" else "missing" if lvl == "missing"
+            else "info"].append(to_json(c))
     return out
 
 
@@ -88,7 +89,10 @@ def build(body: dict, now: _dt.datetime | None = None) -> dict:
         "format": REPORT_FORMAT,
         "generated": (now or _dt.datetime.now(_dt.timezone.utc)).isoformat(timespec="seconds"),
         "software": software(),
-        "inputHash": input_hash(hashed),
+        "inputHash": resolved_hash(calc.resolved_inputs(body)),
+        "documentHash": input_hash(hashed),
+        "certification": to_json(results.get("certification")),
+        "notEvaluated": to_json(results.get("notEvaluated")),
         "metadata": to_json(meta),
         "inputs": {"design": to_json(inputs), "derivedDesign": to_json(results["design"], arrays=False),
                    "operatingPoints": to_json(ops), "settings": to_json(s), "measured": to_json(measured)},
@@ -97,8 +101,7 @@ def build(body: dict, now: _dt.datetime | None = None) -> dict:
         "valid": results.get("valid"),
         "assumptions": assumptions,
         "methods": methods(),
-        "acceptanceCriteria": dict(to_json(s.get("acceptanceCriteria")), evaluated=False,
-                                   note="placeholder - criteria not evaluated (authority pending)"),
+        "acceptanceCriteria": to_json(criteria.evaluate(s.get("acceptanceCriteria"), results, results.get("design"))),
         "units": {"length": "mm", "pressure_inputs": "bar", "speed": "rpm", "viscosity": "cSt",
                   "results": "SI unless the key says otherwise (flowLpm, pMaxBar, cc in cm^3/rev)"},
     }

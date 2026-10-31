@@ -11,7 +11,7 @@
     const req = {};
     for (const el of form.elements) {
       if (!el.name) continue;
-      req[el.name] = el.tagName === 'SELECT' ? el.value : parseFloat(el.value);
+      req[el.name] = el.tagName === 'SELECT' ? el.value : G.num.parse(el.value);
     }
     req.Nmin = Math.round(req.Nmin); req.Nmax = Math.round(req.Nmax);
     return req;
@@ -64,7 +64,7 @@
   });
 
   $('reApply').addEventListener('click', () => {
-    const v = n => parseFloat(form.elements[n].value);
+    const v = n => G.num.parse(form.elements[n].value);
     const out = G.reverseEngineer({ N: Math.round(v('reN')), rp: v('reRp'), Dt: v('reDt'), Dr: v('reDr'), Dl: v('reDl'), Dv: v('reDv'), b: v('reB'), OD: v('reOD') });
     const d = out.derived;
     const txt = `e = ${f(d.e, 4)} mm, R = ${f(d.R, 4)} mm, clearance c = ${f(d.c * 1000, 1)} µm, λ = ${f(d.lambda, 3)}, rp/e = ${f(d.k, 3)}, valley margin ${f(d.valleyMargin, 3)} mm.`;

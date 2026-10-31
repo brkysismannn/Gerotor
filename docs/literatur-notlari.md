@@ -104,3 +104,15 @@ Girdiler: cv [cm³/dev], H [mm], Dc (dış rotor dış çapı) [mm], Z (dış di
 - Hsieh ve ark. (2022): pinli (geroler) tasarımda basınç dalgalanması pinsiz tasarıma göre yaklaşık 5 kat yüksek.
 - Totaro ve ark. (2025): tork kayıplarında dış rotorun radyal ve yan yüzey sürtünmesi baskın. Basit model yüksek devirde torku fazla tahmin ediyor.
 - Zhou ve ark. (2023) ve Wang ve ark. (2024): kavitasyon, giriş basıncı düştükçe artıyor. Titreşim enerjisi 3–8 kHz bandında yoğunlaşıyor.
+
+## 10. Eklenen bölüm (2026-10-31): Colbourne 1974/1975, Bonandrini 2009 ve açık kalan maddeler
+Ayrıntı: `company/reports/2026-10-31-researcher-new-papers-check.md`. Üç makale masaya işlendi (`Masa/.masa`), üçü de "haric" (sızıntı/hacimsel verim modeli yok; geometri ve teorik debi makaleleri).
+- **Bölüm 8 düzeltmesi:** Colbourne (1974) = `colbourne1974.pdf`, Colbourne (1975) = `colbourne1975.pdf`, Bonandrini (2009) = `bonandrini2009.pdf` artık elimizde; "hâlâ eksik" ifadeleri geçersiz.
+- **Colbourne 1974** (MMT 9:421-435): alt kesim (undercut), temas gerilmesi veya debi formülü YOK; zarf denklemi (Denk. 12) çember lobları için gerekmiyor. Kod için "uygulanamaz".
+- **Colbourne 1975** (Trans. CSME 3(4):215-223): Denk. 8 (iz eğriliği), 9 (iç profil eğrilik yarıçapı), 10-11 (kapalı formül ρmin = 3^1.5 √((b²−e²m²)(m−1))/(m+1)^1.5 − d), 28-29 (dA/dψ ve debi), Tablo 1-3, R = b−d+2e (= bizim RvMin) kodla uyumlu. Debi dalgalanması = (max−min)/ortalama; çift m (dış diş) daha kötü, frekans ikiye katlanmıyor. WRPF Colbourne'de yok.
+- **Bonandrini 2009**: Denk. 1-3, 5, 7, 12, 14, 18-23 kodla uyumlu. Denk. 6 ve 15 (γ1 = γt1 + 1/ρ) basım hatası gibi görünüyor, kullanılmamalı. **λ kuralı (A-D7) kapandı:** α3 = α2/nmax = R/(N e) = Ivanović λ = Colbourne b/(e m); Gamez λ_G ve Stryczek λ bunun tersi. Kodun λ = R/(N e) kuralı doğru. Basınç açısı ≤ 40° "pratikte" (s. 1478) kaynaksız bir söylem; koda sabit olarak girilmemeli.
+- **Rundo 2017 Denk. 18-22** birincil kaynaktan doğrulandı (uyumlu). Denk. 24 yaklaşık, kod daha kesin çözüyor.
+- **Kim 2006** taranmış PDF doğrudan okundu: Denk. 1-2 uyumlu; Denk. 4 sıkıştırılamaz ve yarı-statik, kod ise hacim modülü ile daha genel (Kim'in "basma basıncı salınıma etki etmez" sonucu kendi modelinin sonucudur). Cq = 0,68, K = 1,62 GPa, ρ = 875 (s. 1628). 1 % hacim değişimi ≈ 17 MPa (s. 1629). Masa metin dosyası hâlâ boş (OCR gerekli).
+- **Ivanović 2021 bölümü**: Denk. 5 (Hertz, 1,57 = π/2) koddaki p_max ile aynı; Denk. 4 yükü birden fazla dişe paylaştırır (kod tek lob: A-D8a). Bölümde WRPF formülü YOK.
+- **Ivanović 2012 Şekil 9/10:** gecikme açısı (0,22–0,29°) iki kinematik düzende aynı; koda karşılık gelen düzen "sabit eksenli, mil iç dişlide" (Şekil 10, u = 1,2). Kodun δ'sı dış rotor açısında; iç dişli açısına çevirmek için × N/(N−1) (türetme). Sayısal koşu henüz yapılmadı.
+- **Sabit çelişkisi:** assist.js kMin = 1,5 değeri Colbourne Tablo 2'deki m = 7, 8, 9 tasarımlarını (rp/e = 1,47; 1,30; 1,19) eler.

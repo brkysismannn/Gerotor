@@ -31,7 +31,7 @@
     const p = {};
     for (const key of Object.keys(DEFAULTS)) {
       const el = form.elements[key];
-      p[key] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : parseFloat(el.value));
+      p[key] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : G.num.parse(el.value));
     }
     p.N = Math.round(p.N);
     return p;
@@ -95,7 +95,7 @@
   function recompute() {
     // Oil preset: viscosity and density from temperature (js/fluid.js).
     // User oil: ASTM D341 line through the datasheet points.
-    const oilKey = form.elements.oil.value, oilT = parseFloat(form.elements.oilT.value);
+    const oilKey = form.elements.oil.value, oilT = G.num.parse(form.elements.oilT.value);
     const oil = oilKey === 'user' ? G.userOil(readForm(), oilT)
       : oilKey !== 'custom' ? G.oilProperties(oilKey, oilT) : null;
     const oilOk = !!(oil && Number.isFinite(oil.nu) && oil.nu > 0);
@@ -292,7 +292,7 @@
     const order = { err: 0, warn: 1, info: 2, ok: 3 };
     const items = res.checks.slice().sort((a, b) => order[a.level] - order[b.level]);
     $('checks').innerHTML = items.map(c =>
-      `<li class="${c.level}"><b>${c.title}</b><span>${c.detail}</span></li>`).join('');
+      `<li class="${c.level}"${c.criterion ? ` data-criterion="${c.criterion}" title="Open criterion ${c.criterion}"` : ''}><b>${c.title}</b><span>${c.detail}</span></li>`).join('');
     const nOk = items.filter(c => c.level === 'ok').length;
     $('checksCount').textContent = `${items.length - nOk} to review · ${nOk} passed`;
     $('checksAll').textContent = $('checks').classList.contains('showall') ? 'Hide passed' : `Show passed (${nOk})`;
@@ -397,7 +397,7 @@
   function tick(now) {
     const dtS = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (playing && params) {
+    if (playing && params && !G.num.editing()) {       // no animation redraw while a field has focus
       innerDeg = (innerDeg + dtS * parseFloat($('speed').value)) % 360;
       if (res && res.A) {
         renderer.draw(outerAngle(), viewOpts());
@@ -411,12 +411,9 @@
 
   // ------------------------------------------------------------- events
 
-  let pending = false;
-  form.addEventListener('input', () => {
-    if (pending) return;
-    pending = true;
-    requestAnimationFrame(() => { pending = false; recompute(); });
-  });
+  // Recalculation happens after a COMMIT (Enter / blur / select change, event "change"), merged by a debounce, never per keystroke.
+  const scheduleRecompute = G.debounce(recompute, G.num.DEBOUNCE_MS);
+  form.addEventListener('change', () => scheduleRecompute());
 
   $('playBtn').addEventListener('click', () => {
     playing = !playing;
@@ -460,7 +457,7 @@
   // Hook for other panels (Design Assist): load a set of parameters into the form.
   G.app = {
     getState() { return { params, res, calcMs }; },
-    DEFAULTS, readForm, writeForm, migrate, recompute, form,
+    DEFAULTS, readForm, writeForm, migrate, recompute, scheduleRecompute, form,
     onChange(fn) { listeners.push(fn); },
     redraw() { renderer.resize(); if (!renderer.fitted) renderer.fit(); drawCharts(); if (lastOil) drawOilCurve(lastOil.oil, lastOil.T); drawView(); },
     reset() { writeForm(DEFAULTS); renderer.fitted = false; recompute(); },

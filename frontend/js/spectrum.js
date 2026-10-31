@@ -2,8 +2,10 @@
  * Flow ripple spectrum: discrete Fourier transform of the delivered flow over one outer-rotor
  * revolution (fundamental f₂ = n·(N−1)/(60·N) Hz). Harmonic h has frequency h·f₂; amplitudes are
  * given as % of the mean flow (single-sided). The tooth-pass frequency is f_tp = n·(N−1)/60
- * (harmonic N of the outer revolution); for odd N the kinematic ripple repeats twice per tooth
- * pass, so its fundamental is 2·f_tp.
+ * (harmonic N of the outer revolution). The summed delivery of the N chambers has period 2π/N of outer rotation for every N,
+ * so the dominant harmonic is N (the tooth-pass frequency) for odd and even N: there is no frequency doubling for odd N
+ * (checked numerically for N = 7 in tests.js). Lobe-count parity changes the ripple amplitude, not the frequency
+ * (Gamez-Montero et al. p.12, after Manco 2000). Any other dominant harmonic comes from the numeric spectrum, not from a rule.
  */
 (function (G) {
   'use strict';

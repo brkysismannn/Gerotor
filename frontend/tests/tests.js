@@ -688,7 +688,7 @@
   function suiteMaxSpeed() {
     const S = '17 · Filling-limited max speed';
     const P = { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5, portsOn: true };
-    const ms = d => { const p = design(Object.assign({}, P, d)), r = G.analyse(p); return { p, r, m: G.maxSpeed(p, r, { tol: 20 }) }; };
+    const ms = d => { const p = design(Object.assign({}, P, d)), r = G.analyse(p); return { p, r, m: G.maxSpeed(p, r, { tol: 20, inletVelocityLimit: 2 }) }; };     // 2 m/s: a user-entered test limit
     const base = ms({});
     const n0 = base.m.rpm;
     check(S, `Bracket: void ≤ 0.5 % at ${n0.toFixed(0)} rpm and > 0.5 % at +20 rpm`,
@@ -699,7 +699,7 @@
     record(S, 'Scaling with inlet pressure (1 → 2 bar abs)', n0 * Math.sqrt((2 - 0.2) / (1 - 0.2)), ms({ pIn: 2 }).m.rpm, 2.5);
     record(S, 'Scaling with inlet pressure (1 → 0.6 bar abs)', n0 * Math.sqrt((0.6 - 0.2) / (1 - 0.2)), ms({ pIn: 0.6 }).m.rpm, 2.5);
     record(S, 'Double fill (ports on both faces) doubles the opening → 2× speed', 2 * n0, ms({ doubleFill: true }).m.rpm, 2.5);
-    record(S, 'Inlet-velocity speed limit: v = 2 m/s at n_inlet', 2, base.r.flowLpm / P.rpm * base.m.rpmInlet * 1000 / (60 * base.r.ports.suction.area), 1e-6);
+    record(S, 'Inlet-velocity speed limit: v = user limit (2 m/s test input) at n_inlet', 2, base.r.flowLpm / P.rpm * base.m.rpmInlet * 1000 / (60 * base.r.ports.suction.area), 1e-6);
   }
 
   // ------------------------------------------------------------ 18. GDS documents: pumps, axial support, cavitation, side load
@@ -1067,8 +1067,8 @@
     check(S, 'round trip: metadata identical', ['project', 'partNo', 'revision', 'author', 'checker', 'notes', 'scope'].every(k => back.meta[k] === st.meta[k]) && back.calcMode === 'js');
     check(S, 'round trip: load cases and active case identical', P.canonical(back.loadCases) === P.canonical(st.loadCases) && back.activeCase === 1);
     const doc = JSON.parse(text);
-    check(S, 'file follows schema gerotor-project/3: top-level keys, metadata names, operatingPoints items',
-      doc.schema === 'gerotor-project/3' && Object.keys(doc).every(k => ['schema', 'metadata', 'design', 'fluid', 'operatingPoints', 'measured', 'settings', 'results'].includes(k)) &&
+    check(S, 'file follows schema gerotor-project/4: top-level keys, metadata names, operatingPoints items',
+      doc.schema === 'gerotor-project/4' && Object.keys(doc).every(k => ['schema', 'metadata', 'design', 'fluid', 'operatingPoints', 'measured', 'settings', 'results'].includes(k)) &&
       doc.metadata.projectName === st.meta.project && doc.metadata.partNo === 'GP-100' && Array.isArray(doc.metadata.revisions) && !!doc.metadata.signOff.checker &&
       doc.operatingPoints.length === 2 && doc.operatingPoints.every(o => Object.keys(o).every(k => ['name', 'rpm', 'dp', 'oilT', 'pIn', 'nu'].includes(k))) &&
       doc.metadata.workspace.activeCase === 1 && doc.results === null && doc.design.N === 7 && !('faceSupport' in doc.design) && !('doubleFill' in doc.design) && doc.design.dblIn === false && doc.design.shadow === true && doc.fluid.oil === 'custom' && !('oil' in doc.design) && !('fluid' in doc.design));
@@ -1148,7 +1148,7 @@
     P.stamp(null);
     const hUn = G.report.build(st, out.params, out.res, hash, { date: '2026-10-30' });
     check(S, 'R-R3: unstamped code version -> INVALID, NOT FOR CERTIFICATION, "NOT STAMPED"', hUn.includes('data-status="INVALID"') && hUn.includes('NOT FOR CERTIFICATION') && hUn.includes('NOT STAMPED'));
-    check(S, 'R-R3: acceptance criteria are shown as NOT EVALUATED; known issues listed with range state', hUn.includes('data-acceptance="not-evaluated"') && hUn.includes('Acceptance criteria: NOT EVALUATED') && hUn.includes('range not defined (not evaluated)'));
+    check(S, 'R-R3: without limits the acceptance criteria are INCOMPLETE (all NOT EVALUATED, nothing invented); known issues listed with range state', hUn.includes('data-acceptance="incomplete"') && hUn.includes('Acceptance criteria: INCOMPLETE') && hUn.includes('range not defined (not evaluated)'));
     check(S, 'P.stamp accepts /api/health, rejects git "unknown"', P.stamp({ status: 'ok', git: 'abc1234', gerotor_core: '0.1.0', api: '0.2.0' }) === true && P.VERSION.gitHash === 'abc1234' && P.stamp({ status: 'ok', git: 'unknown', gerotor_core: '0.1.0' }) === false && P.VERSION.gitHash === null);
     P.stamp({ status: 'ok', git: 'abc1234', gerotor_core: '0.1.0', api: '0.2.0' });
     const hSt = G.report.build(st, out.params, out.res, hash, { date: '2026-10-30' });
@@ -1161,10 +1161,294 @@
     check(S, 'report of an invalid design carries the INVALID banner and does not throw', G.report.status(badOut.res).valid === false && badHtml.includes('data-status="INVALID"') && badHtml.includes('INVALID'));
   }
 
-  function runAll() {
+  // ------------------------------------------------------------ 25. Acceptance criteria, provenance of numbers, variants (round 3)
+
+  function suiteCriteria() {
+    const S = '25 · Acceptance criteria, number provenance, A-D variants';
+    const C = G.criteria, P = G.project;
+    const cat = C.catalogue();
+    const raw = Object.assign({}, BASE, { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5,
+      portsOn: true, leakOn: true, oil: 'custom', oilT: 40, tipGapModel: 'backlash', Ein: 210, nuIn: 0.3, Eout: 210, nuOut: 0.3,
+      dblIn: false, dblOut: false, shadow: true, fillet: 0, outletVol: 0, portFillet: 0, grooveD: 0 });
+    delete raw.faceSupport; delete raw.doubleFill;
+    const out = G.Calc.run(raw);
+    const ctxOf = (o, runs) => C.context({}, o.params, o.res, runs);
+    const ctx = ctxOf(out);
+    const T0 = '2026-10-31T00:00:00Z';
+    const ov = (id, field, value, unit, extra) => Object.assign({ target: 'criterion', id, field, value, unit, reason: 'test input', user: 'tester', timestamp: T0 }, extra || {});
+    const row = (ev, id) => ev.criteria.find(c => c.id === id);
+
+    // --- catalogue: nothing numeric ships (owner rule no-unexplained-numbers)
+    const allCrit = cat.profiles.flatMap(p => p.criteria);
+    check(S, `catalogue (${cat.profiles.length} profiles, ${allCrit.length} criteria): every limit and safety factor ships empty`,
+      allCrit.every(c => (c.limit === null || (typeof c.limit === 'object' && 'fromMaterial' in c.limit)) && c.safetyFactor === null));
+    check(S, 'catalogue: every material allowable (sigmaHlim, yield) ships empty; every profile names its status as a template',
+      cat.materials.every(m => m.sigmaHlim === null && m.yield === null) && cat.profiles.every(p => /template/.test(p.source.label) && p.source.verified === false));
+    check(S, 'catalogue: only the boolean model-validity predicates are pre-set and labelled "internal"',
+      allCrit.filter(c => c.comparison === 'true').every(c => /internal/.test(c.source.label)) && cat.profiles[0].criteria.filter(c => c.comparison !== 'true').every(c => /no value shipped|material allowable/.test(c.source.label)));
+
+    // --- evaluation rules
+    const ev0 = C.evaluate(null, ctx);
+    check(S, 'default set: limit-based criteria are NOT EVALUATED (empty limit), predicates PASS, overall INCOMPLETE',
+      ev0.overall === 'INCOMPLETE' && row(ev0, 'C-GEOM-VALID').status === 'PASS' && row(ev0, 'C-GEOM-UNDERCUT').status === 'PASS' && row(ev0, 'C-TIP-SPEED').status === 'NOT EVALUATED' &&
+      ev0.criteria.filter(c => c.comparison !== 'true').every(c => c.status === 'NOT EVALUATED') && ev0.counts.FAIL === 0 && ev0.counts.PASS === 2);
+    check(S, 'empty limit is NOT EVALUATED, never PASS, and the reason says so', /no limit entered/.test(row(ev0, 'C-TIP-SPEED').reason) && row(ev0, 'C-TIP-SPEED').value === null);
+    const ts = out.res.tipSpeed;
+    const evL = C.evaluate(C.addOverride(null, ov('C-TIP-SPEED', 'limit', ts * 2, 'm/s')), ctx);
+    record(S, 'tip speed PASS with margin (limit - x)/limit, limit = 2 x tip speed', 0.5, row(evL, 'C-TIP-SPEED').margin, 1e-9);
+    check(S, 'a user limit makes the row PASS; overall stays INCOMPLETE while other criteria are NOT EVALUATED', row(evL, 'C-TIP-SPEED').status === 'PASS' && row(evL, 'C-TIP-SPEED').overridden && evL.overall === 'INCOMPLETE');
+    const evF = C.evaluate(C.addOverride(null, ov('C-TIP-SPEED', 'limit', ts * 0.5, 'm/s')), ctx);
+    check(S, 'a limit below the value is FAIL, margin negative, overall FAIL', row(evF, 'C-TIP-SPEED').status === 'FAIL' && row(evF, 'C-TIP-SPEED').margin < 0 && evF.overall === 'FAIL');
+    const evS = C.evaluate(C.addOverride(C.addOverride(null, ov('C-TIP-SPEED', 'limit', ts * 2, 'm/s')), ov('C-TIP-SPEED', 'safetyFactor', 4, '-')), ctx);
+    check(S, 'safety factor S divides the limit for "<=": allowable = limit/S flips PASS to FAIL', row(evS, 'C-TIP-SPEED').status === 'FAIL' && Math.abs(row(evS, 'C-TIP-SPEED').allowable - ts * 0.5) < 1e-9);
+    const evGe = C.evaluate(C.addOverride(C.addOverride(null, ov('C-ETA-V', 'limit', 0.5, '-')), ov('C-ETA-V', 'safetyFactor', 1.5, '-')), ctx);
+    record(S, '">=" with S: required = limit x S = 0.75; margin = (x - 0.75)/0.75', (row(evGe, 'C-ETA-V').value - 0.75) / 0.75, row(evGe, 'C-ETA-V').margin, 1e-9);
+    const rg = x => C.check('range', x, { min: 1, max: 3 }, null);
+    check(S, 'range comparison: inside PASS with margin min(x-min, max-x)/(max-min), outside FAIL; bad range throws',
+      rg(2)[0] === true && Math.abs(rg(1.5)[1] - 0.25) < 1e-12 && rg(3.5)[0] === false && (() => { try { C.check('range', 2, { min: 3, max: 1 }, null); return false; } catch (e) { return true; } })());
+    check(S, 'unit mismatch of an override makes the criterion NOT EVALUATED (no silent unit guess)',
+      row(C.evaluate(C.addOverride(null, ov('C-TIP-SPEED', 'limit', 25, 'km/h')), ctx), 'C-TIP-SPEED').status === 'NOT EVALUATED');
+    check(S, 'safety factor <= 0 is NOT EVALUATED', row(C.evaluate(C.addOverride(C.addOverride(null, ov('C-TIP-SPEED', 'limit', 25, 'm/s')), ov('C-TIP-SPEED', 'safetyFactor', 0, '-')), ctx), 'C-TIP-SPEED').status === 'NOT EVALUATED');
+    check(S, 'later override of the same field wins; both records are kept with oldValue',
+      (() => { const e = C.evaluate(C.addOverride(C.addOverride(null, ov('C-TIP-SPEED', 'limit', 10, 'm/s')), ov('C-TIP-SPEED', 'limit', 99, 'm/s')), ctx); const r = row(e, 'C-TIP-SPEED'); return r.limit === 99 && r.overrides.length === 2 && r.overrides[1].oldValue === 10 && e.overrides.length === 2; })());
+    // overall PASS / INCOMPLETE rules with disabled criteria
+    let acAll = null;
+    for (const c of cat.profiles[0].criteria) if (c.comparison !== 'true') acAll = C.addOverride(acAll, ov(c.id, 'enabled', false, null));
+    const evP = C.evaluate(acAll, ctx);
+    check(S, 'overall PASS only when at least one criterion is enabled and all enabled PASS (disabled ones do not count)', evP.overall === 'PASS' && evP.counts.disabled === 17 && evP.counts.PASS === 2);
+    let acNone = acAll;
+    for (const id of ['C-GEOM-VALID', 'C-GEOM-UNDERCUT']) acNone = C.addOverride(acNone, ov(id, 'enabled', false, null));
+    check(S, 'overall is INCOMPLETE when no criterion is enabled', C.evaluate(acNone, ctx).overall === 'INCOMPLETE');
+    const badRes = G.Calc.run(Object.assign({}, raw, { R: 10 }));
+    const evBad = C.evaluate(null, ctxOf(badRes));
+    check(S, 'invalid geometry: C-GEOM-VALID FAILs, overall FAIL, nothing throws', row(evBad, 'C-GEOM-VALID').status === 'FAIL' && evBad.overall === 'FAIL');
+
+    // --- overrides are records; reason mandatory; templates untouched
+    const tmpl = JSON.stringify(cat.profiles);
+    const withOv = C.addOverride(null, ov('C-TIP-SPEED', 'limit', 25, 'm/s'), T0);
+    const o = withOv.overrides[0];
+    check(S, 'override record has target, id, field, value, unit, reason, user and timestamp; templates are not modified',
+      ['target', 'id', 'field', 'value', 'unit', 'reason', 'user', 'timestamp'].every(k => k in o) && o.timestamp === T0 && JSON.stringify(cat.profiles) === tmpl && C.effectiveRow(null, 'C-TIP-SPEED').limit === null);
+    const thr = rec => { try { C.addOverride(null, rec); return false; } catch (e) { return true; } };
+    check(S, 'a reason is mandatory (empty / blank reason rejected), as is the user name', thr(ov('C-TIP-SPEED', 'limit', 25, 'm/s', { reason: '' })) && thr(ov('C-TIP-SPEED', 'limit', 25, 'm/s', { reason: '   ' })) && thr(ov('C-TIP-SPEED', 'limit', 25, 'm/s', { user: '' })));
+    check(S, 'override of an unknown criterion or a non-overridable field is reported in issues, not applied',
+      C.evaluate(C.addOverride(C.addOverride(null, ov('C-NOPE', 'limit', 1, 'm/s')), ov('C-TIP-SPEED', 'title', 'x', null)), ctx).issues.length === 2);
+    check(S, 'file loading rejects an override without reason (schema "required")',
+      (() => { try { P.parse(JSON.stringify({ schema: 'gerotor-project/4', metadata: { projectName: 'x' }, design: raw, settings: { acceptanceCriteria: { schemaVersion: 1, overrides: [{ id: 'C-TIP-SPEED', field: 'limit', value: 1, user: 'u', timestamp: T0 }] } } }), raw); return false; } catch (e) { return /reason/.test(e.message); } })());
+
+    // --- material allowables and the Hertz gate
+    let acH = { schemaVersion: 1, activeProfileId: 'generic', authority: { name: null, document: null, edition: null }, materials: { inner: 'steel-case-hardened', outer: null }, overrides: [], customCriteria: [] };
+    check(S, 'C-HERTZ is NOT EVALUATED without a limit on C-HERTZ-VALID (gate) and without an entered material allowable',
+      row(C.evaluate(null, ctx), 'C-HERTZ').status === 'NOT EVALUATED' && /gate C-HERTZ-VALID/.test(row(C.evaluate(null, ctx), 'C-HERTZ').reason) &&
+      /sigmaHlim is empty/.test((() => { let a = C.addOverride(acH, ov('C-HERTZ-VALID', 'limit', 10, '-')); return row(C.evaluate(a, ctx), 'C-HERTZ').reason; })()));
+    const pm = out.res.contact.pmaxMax * 1e-6;
+    acH = C.addOverride(acH, ov('C-HERTZ-VALID', 'limit', 10, '-'));
+    acH = C.addOverride(acH, { target: 'material', id: 'steel-case-hardened', field: 'sigmaHlim', value: pm * 3, unit: 'MPa', reason: 'test input', user: 'tester' }, T0);
+    acH = C.addOverride(acH, ov('C-HERTZ', 'safetyFactor', 1.5, '-'));
+    const evH = C.evaluate(acH, ctx);
+    check(S, 'C-HERTZ: allowable = sigmaHlim / S from the selected material, PASS with margin; the material row is listed in the report data',
+      row(evH, 'C-HERTZ').status === 'PASS' && Math.abs(row(evH, 'C-HERTZ').allowable - pm * 2) < 1e-6 && Math.abs(row(evH, 'C-HERTZ').margin - 0.5) < 1e-9 && evH.materialLibrary.length === 1 && evH.materialLibrary[0].sigmaHlim === pm * 3 && evH.overrides.some(x => x.target === 'material'));
+    check(S, 'a failed gate (validity ratio above its limit) makes C-HERTZ NOT EVALUATED, not PASS',
+      (() => { const a = C.addOverride(acH, ov('C-HERTZ-VALID', 'limit', 1e-9, '-')); const e = C.evaluate(a, ctx); return row(e, 'C-HERTZ-VALID').status === 'FAIL' && row(e, 'C-HERTZ').status === 'NOT EVALUATED'; })());
+    // two rotor materials: the lower allowable governs
+    const acH2 = C.addOverride(Object.assign({}, acH, { materials: { inner: 'steel-case-hardened', outer: 'steel-through-hardened' } }), { target: 'material', id: 'steel-through-hardened', field: 'sigmaHlim', value: pm * 1.2, unit: 'MPa', reason: 'test input', user: 'tester' }, T0);
+    check(S, 'two selected materials: the lower sigma_Hlim governs (min), limitNote names it', Math.abs(row(C.evaluate(acH2, ctx), 'C-HERTZ').allowable - pm * 1.2 / 1.5) < 1e-6 && /min sigmaHlim/.test(row(C.evaluate(acH2, ctx), 'C-HERTZ').limitNote));
+
+    // --- load cases: governing case = smallest margin; a missing case makes the criterion NOT EVALUATED
+    const mkRun = (name, rpm) => { const o2 = G.Calc.run(Object.assign({}, raw, { rpm })); return { name, rpm, params: o2.params, res: o2.res }; };
+    const runs = [mkRun('low', 500), mkRun('high', 3000), mkRun('mid', 1500)];
+    const evC = C.evaluate(C.addOverride(null, ov('C-TIP-SPEED', 'limit', 1000, 'm/s')), ctxOf(out, runs));
+    check(S, 'governing case is the one with the smallest margin (highest speed for a tip-speed limit); all cases are listed',
+      row(evC, 'C-TIP-SPEED').governingCase === 'high' && row(evC, 'C-TIP-SPEED').cases.length === 3 && row(evC, 'C-TIP-SPEED').cases.every(c => c.status === 'PASS'));
+    const evFail = C.evaluate(C.addOverride(null, ov('C-TIP-SPEED', 'limit', runs[2].res.tipSpeed * 1.1, 'm/s')), ctxOf(out, runs));
+    check(S, 'one failing load case makes the criterion FAIL and that case governs', row(evFail, 'C-TIP-SPEED').status === 'FAIL' && row(evFail, 'C-TIP-SPEED').governingCase === 'high' && row(evFail, 'C-TIP-SPEED').cases.filter(c => c.status === 'FAIL').length === 1);
+    const runsBroken = runs.concat([{ name: 'broken', rpm: 100, params: null, res: null }]);
+    check(S, 'a load case that could not be analysed makes a passing criterion NOT EVALUATED (quantity missing), a failing one stays FAIL',
+      row(C.evaluate(C.addOverride(null, ov('C-TIP-SPEED', 'limit', 1000, 'm/s')), ctxOf(out, runsBroken)), 'C-TIP-SPEED').status === 'NOT EVALUATED' && row(C.evaluate(C.addOverride(null, ov('C-TIP-SPEED', 'limit', 1, 'm/s')), ctxOf(out, runsBroken)), 'C-TIP-SPEED').status === 'FAIL');
+    // quantities
+    const q = C.caseQuantities(out.params, out.res);
+    const pr = out.res.ports;
+    record(S, 'inlet port velocity quantity = cc rpm / (60 A_suction fillS) (same formula as ports.inletVelocity)', pr.inletVelocity, q['ports.inletVelocity'], 1e-9);
+    check(S, 'cavitation speed ratio = GDS limit rpm / case rpm; custom criterion on a quantity works (customCriteria + limit override)',
+      (() => { const c2 = C.context({}, out.params, out.res, runs); const v = C.quantityValues('cavitation.speedRatio', c2); const gds = G.gdsCavitationLimits(out.params, out.res).rpm; return Math.abs(v[0][1] - gds / 500) < 1e-9; })() &&
+      (() => { const a = C.addOverride({ activeProfileId: 'customer-defined', customCriteria: [{ id: 'C-X1', quantity: 'ports.inletVelocity', comparison: '<=' }] }, ov('C-X1', 'limit', 100, 'm/s')); const e = C.evaluate(a, ctx); return e.criteria.length === 1 && e.criteria[0].custom && e.criteria[0].status === 'PASS' && e.overall === 'PASS'; })());
+
+    // --- hash: equals the Python backend (criteria.effective) for the same effective set
+    check(S, 'criteria hash of the default set equals the backend hash (JCS + SHA-256)', C.effective(null).hash === '9f05f5683dd53ec80242723aff5afa6459561e50248010a786aedc9d00d0d6e2');
+    const acScen = { schemaVersion: 1, activeProfileId: 'iso-based', authority: { name: 'Test authority', document: null, edition: null }, materials: { inner: 'steel-case-hardened', outer: null },
+      overrides: [ov('C-TIP-SPEED', 'limit', 25, 'm/s'), ov('C-TIP-SPEED', 'safetyFactor', 1.25, '-'), ov('C-BACKLASH', 'limit', { min: 0.01, max: 0.2 }, 'mm'),
+        { target: 'material', id: 'steel-case-hardened', field: 'sigmaHlim', value: 1500, unit: 'MPa', reason: 'test input', user: 'tester', timestamp: T0 }],
+      customCriteria: [{ id: 'C-X1', quantity: 'ports.inletVelocity', comparison: '<=', limit: 3 }] };
+    check(S, 'criteria hash of a set with profile, authority, material, overrides and a custom criterion equals the backend hash', C.effective(acScen).hash === 'd35dd1fef766fc22cce2377ee01e6557730b00486beeabf875ac0a4023c23e6a');
+    check(S, 'hash changes with an override and is stable for the same set', C.effective(withOv).hash !== C.effective(null).hash && C.effective(withOv).hash === C.effective(JSON.parse(JSON.stringify(withOv))).hash);
+
+    // --- core checks without unsourced thresholds
+    const ids = ['C-TIP-SPEED', 'C-PORT-V-IN', 'C-WALL-OUTER', 'C-WALL-INNER', 'C-TIP-SHARP', 'C-TRAPPED', 'C-ETA-V', 'C-P-OVERSHOOT', 'C-CAV-VOID'];
+    const infos = out.res.checks.filter(c => c.criterion);
+    check(S, 'default design: every former unsourced verdict is an info row "... - NOT EVALUATED" linked to its criterion (' + ids.length + ' criteria)',
+      ids.every(id => infos.some(c => c.criterion === id && c.level === 'info' && /NOT EVALUATED$/.test(c.title))) && infos.every(c => cat.profiles[0].criteria.some(k => k.id === c.criterion)));
+    check(S, 'default design: no warning remains from a removed threshold', !out.res.checks.some(c => c.level === 'warn' && /tip speed|wall|inlet port|Trapped|Sharp|overshoot|Cavitation|Volumetric/i.test(c.title)));
+    const fast = G.analyse(design({ N: 7, e: 3, R: 30, rp: 8, b: 20, rpm: 20000, dp: 10 }));
+    check(S, '44 m/s tip speed no longer warns; the calculated value is kept (info row only)', fast.tipSpeed > 30 && !fast.checks.some(c => c.level === 'warn' && c.title !== 'Contact force reversal') && fast.checks.some(c => c.criterion === 'C-TIP-SPEED' && c.level === 'info'));
+    const thin = G.analyse(design({ N: 7, e: 3, R: 30, rp: 8, b: 20, OD: 58, bore: 40 }));
+    check(S, 'thin walls no longer warn (info rows with the ratio); a non-positive wall is still an error', !thin.checks.some(c => c.level === 'warn' && c.title !== 'Contact force reversal') && thin.checks.some(c => c.criterion === 'C-WALL-OUTER') &&
+      G.analyse(design({ N: 7, e: 3, R: 30, rp: 8, b: 20, OD: 50 })).checks.some(c => c.level === 'err' && c.title === 'No outer rotor wall'));
+    const rhoMin = G.analyse(design({ N: 7, e: 3, R: 30, rp: 8, b: 20 })).rhoMin;
+    const sharp = G.analyse(design({ N: 7, e: 3, R: 30, rp: 0.95 * rhoMin, b: 20 }));
+    check(S, 'sharp tips (rp + c = 0.95 rho_min) no longer warn; "No undercut" stays; undercut stays an error', sharp.checks.some(c => c.title === 'No undercut' && c.level === 'ok') && sharp.checks.some(c => c.criterion === 'C-TIP-SHARP') && !sharp.checks.some(c => c.level === 'warn' && c.title !== 'Contact force reversal') &&
+      G.analyse(design({ N: 7, e: 3, R: 30, rp: 1.01 * rhoMin, b: 20 })).checks.some(c => c.level === 'err' && c.title === 'Inner rotor undercut'));
+    const hi = G.analyse(design({ N: 7, e: 3, R: 30, rp: 8, b: 20, c: 0.03, bore: 18, rpm: 6000, dp: 250, portsOn: true, leakOn: true, pIn: 0.5 }));
+    check(S, 'cavitating / high-loss / overshooting port design: no verdict-warnings, values kept (voidMax, portEfficiency, pMaxBar, trappedVolumeSwing, pressureOvershoot)',
+      !hi.checks.some(c => c.level === 'warn' && c.title !== 'Port beyond outer valley' && c.title !== 'Port reaches shaft bore' && c.title !== 'Contact force reversal') && Number.isFinite(hi.ports.voidMax) && Number.isFinite(hi.ports.portEfficiency) && Number.isFinite(hi.ports.pressureOvershoot) && Number.isFinite(hi.ports.trappedVolumeSwing));
+    check(S, 'info rows from the port model also carry their criterion (C-CAV-VOID, C-P-OVERSHOOT, C-ETA-V, C-TRAPPED, C-PORT-V-IN)', ['C-CAV-VOID', 'C-P-OVERSHOOT', 'C-ETA-V', 'C-TRAPPED', 'C-PORT-V-IN'].every(id => hi.ports.checks.some(c => c.criterion === id)));
+
+    // --- maxSpeed: inlet-velocity speed only from a USER limit
+    const base = out.res;
+    const m0 = G.maxSpeed(out.params, base, { tol: 200 });
+    check(S, 'maxSpeed without a velocity limit: rpmInlet is null and the basis says NOT EVALUATED (former hard-coded 2 m/s removed)', m0.rpmInlet === null && /NOT EVALUATED/.test(m0.rpmInletBasis));
+    const m3 = G.maxSpeed(out.params, base, { tol: 200, inletVelocityLimit: 3 });
+    record(S, 'maxSpeed with a user limit v = 3 m/s: velocity at rpmInlet equals the limit', 3, base.flowLpm / out.params.rpm * m3.rpmInlet * 1000 / (60 * base.ports.suction.area), 1e-6);
+
+    // --- A-D6 journal lever-arm variant, A-D2 / A-D4 cavitation variants (references: gerotor_core 0.1.0, git 1a61bb2, same design)
+    const jd = design({ N: 7, e: 3, R: 30, rp: 8, b: 20, c: 0.03, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5, portsOn: true, jbLen: 20, jbClr: 0.04, nu: 30, rho: 860 });
+    const jr = G.analyse(jd);
+    const m00 = G.computeMechanical(jd, jr), m10 = G.computeMechanical(jd, jr, { l1: 12, l2: 28, L1: 9, L2: 14 }), m11 = G.computeMechanical(jd, jr, { l1: 20, l2: 20, L1: 10, L2: 10 });
+    record(S, 'A-D6 default (symmetric W/2): Mjb equals gerotor_core 0.05170347294917315 N m', 0.05170347294917315, m00.Mjb, 1e-8);
+    record(S, 'A-D6 lever-arm variant (l1 12, l2 28, L1 9, L2 14 mm): Mjb equals gerotor_core 0.05264528779385125 N m', 0.05264528779385125, m10.Mjb, 1e-8);
+    record(S, 'A-D6 lever-arm variant: eccentricity of the worse bearing equals gerotor_core 0.9517074569528703', 0.9517074569528703, m10.epsJb, 1e-8);
+    record(S, 'A-D6 lever-arm variant: shaft torque equals gerotor_core 27.41257381371756 N m', 27.41257381371756, m10.Mshaft, 1e-8);
+    check(S, 'A-D6 equal arms and equal lengths (L1 = L2 = jbLen/2) reproduce the symmetric default exactly', Math.abs(m11.Mjb - m00.Mjb) < 1e-12 * m00.Mjb && m11.Mshaft === m00.Mshaft);
+    const gd = design({ N: 7, e: 3, R: 30, rp: 8, b: 20, c: 0.03, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5, portsOn: true, jbLen: 20, jbClr: 0.04, nu: 30, rho: 860, dblIn: true, pIn: 2 });
+    const gr = G.analyse(gd);
+    const g = (h, f) => G.gdsCavitationLimits(gd, gr, h, f);
+    record(S, 'A-D2/A-D4 defaults (inlet head, area x fillS): gallery limit equals gerotor_core 6412.0259666492875 rpm', 6412.0259666492875, g().rpmGallery, 1e-8);
+    record(S, 'A-D2/A-D4 defaults: tip limit equals gerotor_core 7824.468823282031 rpm', 7824.468823282031, g().rpmTip, 1e-8);
+    record(S, 'A-D2 atm head (GDS p.3, 1.01325 bar): tip limit equals gerotor_core 5259.332738204338 rpm, governs (basis)', 5259.332738204338, g('atm', true).rpm, 1e-8);
+    check(S, 'A-D2 atm head: basis is "rotor tip speed"; A-D2 inlet: "inlet gallery velocity"', g('atm', true).basis === 'rotor tip speed' && g('inlet', true).basis === 'inlet gallery velocity');
+    record(S, 'A-D4 GDS single-port area (no x fillS): gallery limit equals gerotor_core 4533.987042161939 rpm', 4533.987042161939, g('inlet', false).rpmGallery, 1e-8);
+    record(S, 'A-D4 single-port area: gallery diameter equals gerotor_core 0.02594125176411863 m', 0.02594125176411863, g('inlet', false).galleryD, 1e-8);
+    record(S, 'A-D2 atm + A-D4 single area: min of both equals gerotor_core 4533.987042161939 rpm', 4533.987042161939, g('atm', false).rpm, 1e-8);
+    check(S, 'unknown head is rejected (as gerotor_core)', (() => { try { g('bogus'); return false; } catch (e) { return true; } })());
+    check(S, 'maxSpeed passes the A-D2 / A-D4 variants to the GDS limits', G.maxSpeed(gd, gr, { tol: 400, cavHead: 'atm', cavAreaDoubleFill: false }).gds.rpm === g('atm', false).rpm);
+
+    // --- spectrum: odd N has no frequency doubling (the former header comment said so; numerics say otherwise)
+    const sp = G.rippleSpectrum(out.params, out.res);
+    check(S, 'N = 7 (odd): dominant kinematic harmonic is N (tooth-pass frequency), not 2N', sp.kinTop[0].h === 7);
+  }
+
+  function suiteCriteriaFiles() {
+    const S = '26 · Project file schema /4, report criteria section, DRAFT marking, example label';
+    const P = G.project, C = G.criteria;
+    const raw = Object.assign({}, BASE, { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, rpm: 1500, dp: 100, RvClear: 0.5,
+      portsOn: true, leakOn: true, oil: 'custom', oilT: 40, tipGapModel: 'backlash', Ein: 210, nuIn: 0.3, Eout: 210, nuOut: 0.3,
+      dblIn: false, dblOut: false, shadow: true, fillet: 0, outletVol: 0, portFillet: 0, grooveD: 0 });
+    delete raw.faceSupport; delete raw.doubleFill;
+    const T0 = '2026-10-31T00:00:00Z';
+    const st = P.create(raw);
+    check(S, 'new projects carry the label "Example design (not a recommendation)" and save it in metadata.designLabel',
+      st.meta.designLabel === 'Example design (not a recommendation)' && JSON.parse(P.serialize(st)).metadata.designLabel === 'Example design (not a recommendation)' && P.EXAMPLE_LABEL === st.meta.designLabel);
+    const back0 = P.parse(P.serialize(st), raw);
+    check(S, 'designLabel survives the round trip; a cleared label stays cleared; a bare foreign parameter file has no label', back0.meta.designLabel === P.EXAMPLE_LABEL &&
+      (() => { const s2 = P.create(raw); s2.meta.designLabel = ''; return P.parse(P.serialize(s2), raw).meta.designLabel === ''; })() && P.parse(JSON.stringify(raw), raw).meta.designLabel === '');
+    check(S, 'files are saved as gerotor-project/4; default criteria settings are not written (hash unchanged by the feature)', P.SCHEMA === 'gerotor-project/4' && JSON.parse(P.serialize(st)).schema === 'gerotor-project/4' && !('settings' in JSON.parse(P.serialize(st))));
+    check(S, 'schema /1 ... /4 are all loadable, /5 is rejected', [1, 2, 3, 4].every(v => { try { P.parse(JSON.stringify({ schema: 'gerotor-project/' + v, metadata: { projectName: 'x' }, design: raw }), raw); return true; } catch (e) { return false; } }) &&
+      (() => { try { P.parse(JSON.stringify({ schema: 'gerotor-project/5', design: raw }), raw); return false; } catch (e) { return true; } })());
+    const old = P.parse(JSON.stringify({ schema: 'gerotor-project/3', metadata: { projectName: 'x' }, design: raw, settings: { samples: 24, acceptanceCriteria: { authority: 'Lloyd test', status: 'pending', criteria: [{ id: 'X1', quantity: 'geometry.tipSpeed', comparison: '<=', limit: 12, unit: 'm/s', source: 'my spec' }] } } }), raw);
+    const mig = old.settings.acceptanceCriteria;
+    check(S, '/3 placeholder acceptanceCriteria is migrated like the backend: authority.name, customCriteria with source label, profile customer-defined; other settings kept',
+      mig.schemaVersion === 1 && mig.activeProfileId === 'customer-defined' && mig.authority.name === 'Lloyd test' && mig.customCriteria.length === 1 && mig.customCriteria[0].source.label === 'my spec' && old.settings.samples === 24 &&
+      C.migrateV3({ authority: null, status: 'pending', criteria: [] }).activeProfileId === 'generic');
+    // criteria settings round trip
+    const st2 = P.create(raw);
+    st2.settings = { acceptanceCriteria: C.addOverride(null, { target: 'criterion', id: 'C-TIP-SPEED', field: 'limit', value: 25, unit: 'm/s', reason: 'customer spec rev B', user: 'AB' }, T0) };
+    const back = P.parse(P.serialize(st2), raw);
+    check(S, 'criteria settings (override with reason, user, timestamp) round-trip and enter the input hash', back.settings.acceptanceCriteria.overrides[0].reason === 'customer spec rev B' && P.inputHashSync(back) === P.inputHashSync(st2) && P.inputHashSync(st2) !== P.inputHashSync(st));
+
+    // --- report
+    const out = G.Calc.run(raw), hash = P.inputHashSync(st2);
+    const sg = P.VERSION.gitHash, sc = P.VERSION.core;
+    P.stamp({ status: 'ok', git: 'abc1234', gerotor_core: '0.1.0', api: '0.2.0' });
+    st2.meta.author = ''; st2.meta.checker = '';
+    const rDraft = G.report.build(st2, out.params, out.res, hash, { date: '2026-10-31' });
+    check(S, 'report without author and checker is marked DRAFT / UNSIGNED (cover banner and page mark)', rDraft.includes('data-draft="true"') && rDraft.includes('DRAFT / UNSIGNED') && rDraft.includes('data-draft-mark="true"') && G.report.unsigned(st2.meta));
+    st2.meta.author = 'AB';
+    check(S, 'report with an author but no checker is still DRAFT / UNSIGNED', G.report.build(st2, out.params, out.res, hash, { date: '2026-10-31' }).includes('data-draft="true"'));
+    st2.meta.checker = 'CD';
+    const rOk = G.report.build(st2, out.params, out.res, hash, { date: '2026-10-31', omitted: [{ path: 'spectrum', key: 'harmonics', length: 42, reason: 'array longer than 64 entries' }] });
+    check(S, 'report with author and checker is not marked DRAFT', !rOk.includes('data-draft="true"') && !rOk.includes('data-draft-mark="true"'));
+    const ids = C.catalogue().profiles[0].criteria.map(c => c.id);
+    check(S, 'report: criteria section lists one row per criterion with status, source label and margin columns', ids.every(id => rOk.includes('data-criterion="' + id + '"')) && rOk.includes('Acceptance criteria</h2>') && /<th>Margin %<\/th>/.test(rOk) && /<th>Governing case<\/th>/.test(rOk) && /<th>Source<\/th>/.test(rOk));
+    const evR = C.evaluate(st2.settings.acceptanceCriteria, C.context(st2.settings, out.params, out.res, null));
+    check(S, 'report: criteria-set hash, overrides list (reason, user, timestamp) and overall status are printed', rOk.includes('id="criteriaHash">' + evR.criteriaHash) && rOk.includes('customer spec rev B') && rOk.includes('>AB<') && rOk.includes(T0) && rOk.includes('data-criteria-overall="' + evR.overall + '"'));
+    check(S, 'report: the mandatory statement (final acceptance rests with the user\'s certifying authority) is printed verbatim, also on the cover', rOk.includes(G.report.esc(evR.statement)) && /data-statement="acceptance"/.test(rOk) && /Final acceptance of the design rests with the user&#39;s|Final acceptance of the design rests with the user's/.test(rOk));
+    check(S, 'report: a user limit shows as a PASS / FAIL row (tip speed 25 m/s) and the others as NOT EVALUATED with a reason', /data-criterion="C-TIP-SPEED"[\s\S]{0,700}data-status="PASS"/.test(rOk) && /data-status="NOT EVALUATED"[\s\S]{0,60}no limit entered/.test(rOk));
+    check(S, 'report: info rows linked to a criterion carry an anchor to the criterion row', rOk.includes('href="#crit-C-TIP-SPEED"') && rOk.includes('id="crit-C-TIP-SPEED"'));
+    check(S, 'report: _omitted note lists the left-out bulk data (opts.omitted and backendData._omitted)', rOk.includes('data-omitted="1"') && rOk.includes('spectrum.harmonics') &&
+      G.report.build(st2, out.params, out.res, hash, { backendData: { spectrum: { _omitted: [{ key: 'harmonics', length: 70, reason: 'long' }] } } }).includes('spectrum.harmonics') && G.report.collectOmitted({ a: { b: { _omitted: [{ key: 'k', length: 3, reason: 'r' }] } } })[0].path === 'a.b');
+    check(S, 'report: the source kind "unsourced" is shown as such and flagged', (P.methodsData().methods.some(m => (m.sources || []).some(s => s.kind === 'unsourced')) ? rOk.includes('kind-unsourced">[unsourced]') : false) && rOk.includes('Sources of kind'));
+    check(S, 'report: design basis label "Example design (not a recommendation)" is printed on the cover', rOk.includes('data-design-label') && rOk.includes('Example design (not a recommendation)'));
+    const rNone = G.report.build(P.create(raw), out.params, out.res, hash, { date: '2026-10-31' });
+    check(S, 'report with no override: overall INCOMPLETE and "No override has been entered"', rNone.includes('data-criteria-overall="INCOMPLETE"') && rNone.includes('data-overrides="none"') && rNone.includes('data-acceptance="incomplete"'));
+    check(S, 'report offline: "Document hash only (offline)", no resolved hash, no certification line', rNone.includes('data-resolved="offline"') && !rNone.includes('id="resolvedHash"') && !rNone.includes('data-certification'));
+    const rRes = G.report.build(st2, out.params, out.res, hash, { date: '2026-10-31', resolved: { inputHash: 'a'.repeat(64), documentHash: hash, certification: { status: 'NOT FOR CERTIFICATION', reasons: ['unsourced oil row'], note: 'n' } } });
+    check(S, 'report with backend data: resolved-input hash, document hash and certification status (with reasons) are printed', rRes.includes('id="resolvedHash">' + 'a'.repeat(64)) && rRes.includes('id="documentHash">' + hash) && rRes.includes('data-certification="NOT FOR CERTIFICATION"') && rRes.includes('unsourced oil row') && !rRes.includes('data-resolved="offline"'));
+    P.VERSION.gitHash = sg; P.VERSION.core = sc;
+  }
+
+  function suiteAssistProvenance() {
+    const S = '27 · Design Assist: no unsourced rules, no scoring weights';
+    const D = G.assistDefaults, O = G.assistObjectives;
+    check(S, 'kMin, sharpLimit and tipLimit are empty by default (no rule without a source)', D.kMin === null && D.sharpLimit === null && D.tipLimit === null);
+    check(S, 'objective ranking has no weights: score is a single quantity, "then" only breaks ties', ['ripple', 'compact', 'contact'].every(k => typeof O[k].score === 'function' && typeof O[k].then === 'function') &&
+      O.ripple.score({ ripple: 0.1, ODreq: 90 }) === 0.1 && O.compact.score({ ripple: 0.1, ODreq: 90 }) === 90 && O.contact.score({ pmax: 5e8, ripple: 0.1 }) === 5e8);
+    check(S, 'search settings are one named object (grid 14 x 12, steps, de-duplication) used by the search', G.assistSearch.nLam === 14 && G.assistSearch.nK === 12);
+    const rq = { flow: 15, rpm: 1000, b: 10, ODmax: 95, bore: 22, Nmin: 11, Nmax: 11, objective: 'ripple' };
+    const a = G.designAssist(rq);
+    check(S, 'default search (no kMin) accepts rp/e below the former 1.5 limit (Colbourne-type r_p/e 1.19 is not rejected)', a.results.length > 0 && a.results[0].k < 1.5 && !a.rejected['lobe radius']);
+    check(S, 'a user kMin of 1.5 restores the rule and then rejects that design', G.designAssist(Object.assign({}, rq, { kMin: 1.5 })).results.every(r => r.k >= 1.5));
+    check(S, 'a user tip-speed limit filters; with none, nothing is rejected for tip speed', !a.rejected['tip speed'] && (G.designAssist(Object.assign({}, rq, { tipLimit: 0.001 })).results.length === 0));
+    const ex = G.designAssist(Object.assign({}, rq, { search: { nLam: 28, nK: 24 } }));
+    check(S, 'refining the grid keeps the winning lobe count and changes the objective by < 5 % (convergence.md, Design Assist)', ex.results[0].N === a.results[0].N && Math.abs(ex.results[0].ripple - a.results[0].ripple) / a.results[0].ripple < 0.05);
+  }
+
+  function suiteNumInput() {
+    const S = '28 · Free numeric entry and debounce';
+    const N = G.num;
+    check(S, 'normalise: dot and decimal comma, thousands separators, spaces, exponent', N.normalise('3,5') === '3.5' && N.normalise('3.5') === '3.5' && N.normalise(' 1.234,5 ') === '1234.5' && N.normalise('1,234.5') === '1234.5' && N.normalise('-0,25') === '-0.25' && N.normalise('1e-3') === '1e-3' && N.normalise('.5') === '.5');
+    check(S, 'normalise: empty stays empty, text is rejected (null), parse gives NaN for both', N.normalise('') === '' && N.normalise('abc') === null && N.normalise('1.2.3') === null && Number.isNaN(N.parse('')) && Number.isNaN(N.parse('x')) && N.parse('2,5') === 2.5);
+    // debounce with injected timers
+    let now = 0, q = [], calls = 0;
+    const T = { set: (f, d) => { const t = { f, at: now + d }; q.push(t); return t; }, clear: t => { q = q.filter(x => x !== t); } };
+    const run = to => { now = to; for (const t of q.filter(x => x.at <= now)) { q = q.filter(x => x !== t); t.f(); } };
+    const d = G.debounce(() => { calls++; }, N.DEBOUNCE_MS, T);
+    d(); now = 100; d(); now = 200; d();
+    run(400); check(S, 'debounce: a burst of commits does not fire before the quiet period ends', calls === 0 && d.pending());
+    run(200 + N.DEBOUNCE_MS); check(S, 'debounce: exactly one call after the quiet period (delay ' + N.DEBOUNCE_MS + ' ms, within 250-400 ms)', calls === 1 && !d.pending() && N.DEBOUNCE_MS >= 250 && N.DEBOUNCE_MS <= 400);
+    d(); d.flush(); check(S, 'debounce: flush runs the pending call at once', calls === 2 && !d.pending());
+    if (typeof document !== 'undefined' && document.body && document.body.appendChild) {
+      const el = document.createElement('input'); el.type = 'text'; el.setAttribute('data-num', ''); el.setAttribute('step', '0.5'); el.setAttribute('min', '0');
+      document.body.appendChild(el);
+      let inputs = 0, changes = 0; el.addEventListener('input', () => inputs++); el.addEventListener('change', () => changes++);
+      el.value = '12.5'; el.focus();
+      check(S, 'DOM: focusing a numeric field selects its whole text', el.selectionStart === 0 && el.selectionEnd === el.value.length && document.activeElement === el);
+      for (const part of ['1', '1,', '1,2', '1,25']) { el.value = part; el.dispatchEvent(new Event('input', { bubbles: true })); }
+      check(S, 'DOM: free typing (including a decimal comma) is not altered or blocked per keystroke; focus is kept', el.value === '1,25' && inputs === 4 && changes === 0 && document.activeElement === el);
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      check(S, 'DOM: on commit (change) the text is normalised to a dot and fires once', el.value === '1.25' && changes === 1);
+      el.value = 'abc'; el.dispatchEvent(new Event('change', { bubbles: true }));
+      check(S, 'DOM: invalid text is kept visible, not silently replaced', el.value === 'abc');
+      el.value = '2'; el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+      check(S, 'DOM: ArrowUp steps by the step attribute and commits', el.value === '2.5');
+      el.value = '0.2'; el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      check(S, 'DOM: ArrowDown respects min', el.value === '0');
+      el.remove();
+    }
+  }
+
+  function runAll(only) {      // only: optional array of suite function names (quick runs)
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica, suiteDrawingStep, suiteProject]) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica, suiteDrawingStep, suiteProject, suiteCriteria, suiteCriteriaFiles, suiteAssistProvenance, suiteNumInput].filter(f => !only || only.includes(f.name))) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };

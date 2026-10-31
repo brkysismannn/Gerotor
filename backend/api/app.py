@@ -77,7 +77,8 @@ def _calc(body, modules, arrays):
     if isinstance(body, dict) and "schema" in body:
         body = project.load(body)
     out = to_json(cache.cached_run(body, modules), arrays=arrays)
-    out["inputHash"] = project.input_hash(body if "design" in body else {"design": body})
+    out["inputHash"] = project.resolved_hash(calc.resolved_inputs(body))
+    out["documentHash"] = project.input_hash(body if "design" in body else {"design": body})
     out["software"] = report.software()
     return out
 
@@ -115,6 +116,13 @@ def methods_post(body: dict = Body(...)):
     if isinstance(body, dict) and "schema" in body:
         body = project.load(body)
     return _methods_payload((body or {}).get("settings"))
+
+
+@app.get("/api/criteria/profiles")
+def criteria_profiles():
+    """Acceptance-criteria profiles (all limits empty), material library, quantity keys, statement."""
+    from . import criteria
+    return to_json(criteria.catalogue())
 
 
 @app.get("/api/project/schema")

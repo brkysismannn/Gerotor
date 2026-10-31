@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gerotor.local/schema/gerotor-project/3",
+  "$id": "https://gerotor.local/schema/gerotor-project/4",
   "title": "Gerotor project file",
-  "description": "Saved gerotor design: metadata, design inputs (fixed units, see x-unit), fluid, load cases, calculation settings and optionally stored results with the SHA-256 of the inputs they were computed from. Input hash = SHA-256 over the UTF-8 bytes of the RFC 8785 JSON Canonicalization Scheme (JCS) text of {design, fluid, operatingPoints, settings, measured} (absent/null/empty members omitted); numbers per ECMAScript Number.prototype.toString (3.0 -> 3, 1e-5 -> 0.00001, 1e21 -> 1e+21). Version 3 moves oil settings into 'fluid', adds optional oilT/pIn/nu per operating point, and makes faceSupport/doubleFill derived (from dblIn/dblOut/shadow, core rule) instead of stored. Older files are migrated automatically (api/project.py MIGRATIONS); their input hash is recomputed and changes once.",
+  "description": "Saved gerotor design: metadata, design inputs (fixed units, see x-unit), fluid, load cases, calculation settings and optionally stored results with the SHA-256 of the inputs they were computed from. Input hash = SHA-256 over the UTF-8 bytes of the RFC 8785 JSON Canonicalization Scheme (JCS) text of {design, fluid, operatingPoints, settings, measured} (absent/null/empty members omitted); numbers per ECMAScript Number.prototype.toString (3.0 -> 3, 1e-5 -> 0.00001, 1e21 -> 1e+21). Version 3 moves oil settings into 'fluid', adds optional oilT/pIn/nu per operating point, and makes faceSupport/doubleFill derived (from dblIn/dblOut/shadow, core rule) instead of stored. Older files are migrated automatically (api/project.py MIGRATIONS); their input hash is recomputed and changes once. Version 4 replaces the settings.acceptanceCriteria placeholder by the authority-independent criteria model (profile id, authority, material selection, override records, custom criteria; all shipped limits empty).",
   "type": "object",
   "required": [
     "schema",
@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "schema": {
-      "const": "gerotor-project/3"
+      "const": "gerotor-project/4"
     },
     "metadata": {
       "type": "object",
@@ -219,6 +219,35 @@
         "shadow": {
           "type": "boolean",
           "description": "shadow (balancing) pockets on the port-free face"
+        },
+        "Ein": {
+          "$ref": "#/$defs/num",
+          "x-unit": "GPa",
+          "description": "inner-rotor Young's modulus (user input, no default)"
+        },
+        "nuIn": {
+          "$ref": "#/$defs/num",
+          "x-unit": "-",
+          "description": "inner-rotor Poisson ratio (user input, no default)"
+        },
+        "Eout": {
+          "$ref": "#/$defs/num",
+          "x-unit": "GPa",
+          "description": "outer-rotor Young's modulus (user input, no default)"
+        },
+        "nuOut": {
+          "$ref": "#/$defs/num",
+          "x-unit": "-",
+          "description": "outer-rotor Poisson ratio (user input, no default)"
+        },
+        "shaftVent": {
+          "type": "boolean",
+          "description": "shaft bore vented to suction (leakage model); required when leakOn"
+        },
+        "grooveW": {
+          "$ref": "#/$defs/num",
+          "x-unit": "mm",
+          "description": "relief-groove width; required when a groove length > 0"
         }
       },
       "allOf": [
@@ -521,60 +550,213 @@
           }
         },
         "acceptanceCriteria": {
-          "description": "PLACEHOLDER - acceptance / safety-factor criteria are NOT evaluated yet (pending the owner's choice of authority/standard). Stored, hashed and echoed in the report only.",
+          "description": "Acceptance criteria (api/criteria.py). Profiles are software templates with EMPTY limits; every user value is an override record (value, unit, reason, user, timestamp). Evaluated in /api/report/data.",
           "type": "object",
           "additionalProperties": false,
           "default": {
-            "authority": null,
-            "status": "pending",
-            "criteria": []
+            "schemaVersion": 1,
+            "activeProfileId": "generic",
+            "authority": {
+              "name": null,
+              "document": null,
+              "edition": null
+            },
+            "materials": {
+              "inner": null,
+              "outer": null
+            },
+            "overrides": [],
+            "customCriteria": []
           },
           "properties": {
-            "authority": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "standard / customer spec the criteria come from (to be chosen)"
+            "schemaVersion": {
+              "const": 1
             },
-            "status": {
+            "activeProfileId": {
               "enum": [
-                "pending"
-              ],
-              "description": "only 'pending' until criteria evaluation is implemented"
+                "generic",
+                "iso-based",
+                "class-society",
+                "customer-defined"
+              ]
             },
-            "criteria": {
+            "authority": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "document": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edition": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "materials": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "inner": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "outer": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "overrides": {
               "type": "array",
               "items": {
                 "type": "object",
                 "required": [
                   "id",
-                  "quantity",
-                  "limit"
+                  "field",
+                  "reason",
+                  "user",
+                  "timestamp"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "target": {
+                    "enum": [
+                      "criterion",
+                      "material"
+                    ],
+                    "default": "criterion"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "field": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "boolean",
+                      "string",
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "user": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "customCriteria": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "quantity"
                 ],
                 "additionalProperties": false,
                 "properties": {
                   "id": {
                     "type": "string"
                   },
+                  "title": {
+                    "type": "string"
+                  },
                   "quantity": {
                     "type": "string",
-                    "description": "result path, e.g. contact.pMaxPeak"
+                    "description": "key of GET /api/criteria/profiles quantities"
                   },
                   "comparison": {
                     "enum": [
                       "<=",
-                      ">="
+                      ">=",
+                      "range",
+                      "true"
                     ]
                   },
                   "limit": {
-                    "type": "number"
+                    "type": [
+                      "number",
+                      "object",
+                      "null"
+                    ]
                   },
                   "unit": {
                     "type": "string"
                   },
+                  "safetyFactor": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "exclusiveMinimum": 0
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "gate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "source": {
-                    "type": "string"
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "doc": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "clause": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "verified": {
+                        "type": "boolean"
+                      }
+                    }
                   }
                 }
               }

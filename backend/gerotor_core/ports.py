@@ -62,9 +62,22 @@ def circle_poly(c, r, n):
 
 # ----------------------------------------------------------------- port geometry
 
+# Numerical settings (values = JS tool; convergence evidence: docs/convergence.md).
+PORT_EXTENT_N_IN, PORT_EXTENT_N_OUT = 96, 32  # N07 chamber polygon for the port-edge extent
+PORT_ARC_N = 96        # N07 points per kidney-port arc
+PIECE_SEGMENTS = 24    # N07 segments per <= 90 deg clipping sector
+FILLET_ARC_N = 12      # N07 points per port fillet arc
+FILLET_CORNER_N = 6    # N07 points of the corner-side arc of a fillet fan
+GROOVE_PIECE_DEG = 2   # N07 max groove quadrilateral span [deg]
+DISK_N = 128           # N07 polygon of the inner-port disc
+CH_SUB_DEFAULT = 12    # N08 single-chamber sub-steps per grid step (if design simSub absent)
+CH_CYCLES = 3          # N08 single-chamber revolutions (last recorded)
+CH_BISECT = 60         # N08 single-chamber implicit-Euler bisections
+OPEN_TOL_REL = 0.0     # C18 "open" = clipped area > 0 (closed areas are exactly 0; JS 1e-4 dropped real overlaps, docs/convergence.md)
+
 def chamber_extent(p, L, thC):
     """Polar extent about O2 of the chamber polygon centred at housing angle thC."""
-    poly = chamber(p, thC - math.pi / p["N"], L, 96, 32)["polygon"]
+    poly = chamber(p, thC - math.pi / p["N"], L, PORT_EXTENT_N_IN, PORT_EXTENT_N_OUT)["polygon"]
     lo, hi = math.inf, -math.inf
     for q in poly:
         a = _wrap_pi(math.atan2(q[1], q[0]) - thC)
@@ -94,8 +107,9 @@ def ray_to_inner(p, a) -> float:
     return 0.0 if disc < 0 else b + math.sqrt(disc)
 
 
-def port_outline(p, a0, a1, n=96):
+def port_outline(p, a0, a1, n=None):
     """Closed CCW outline of a kidney port spanning [a0, a1]."""
+    n = n or PORT_ARC_N
     Ro = p["portRo"]
     pts = [(Ro * math.cos(a0 + (a1 - a0) * i / n), Ro * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
     if p["portRi"] > 0:
@@ -124,20 +138,21 @@ def sector_pieces(p, a0, a1):
         b0 = a0 + (a1 - a0) * k / nP
         b1 = a0 + (a1 - a0) * (k + 1) / nP
         poly = [(0.0, 0.0)]
-        for i in range(25):
-            a = b0 + (b1 - b0) * i / 24
+        for i in range(PIECE_SEGMENTS + 1):
+            a = b0 + (b1 - b0) * i / PIECE_SEGMENTS
             poly.append((p["portRo"] * math.cos(a), p["portRo"] * math.sin(a)))
         pieces.append(poly)
     return pieces
 
 
-def filleted_port(p, a0, a1, rf, n_arc=12):
+def filleted_port(p, a0, a1, rf, n_arc=None):
     """Port corner radii (GDS "Port Fillet Radii").
 
     Each corner between a radial edge (angle a, inward normal n) and a boundary circle gets a
     tangent fillet rf: outer circle |C| = Ro - rf; inner circle |C - O1| = Ri + rf. The corner
     material is removed from the opening area as a fan of signed triangles from the corner K.
     """
+    n_arc = n_arc or FILLET_ARC_N
     Ro, Ri, O1 = p["portRo"], p["portRi"], (p["e"], 0.0)
 
     def corner(a, side, which):
@@ -186,7 +201,7 @@ def filleted_port(p, a0, a1, rf, n_arc=12):
     if not (dA < a1 - a0 + 1e-9):
         return {"error": "Port fillet radius too large for the port angle."}
 
-    out = [(Ro * math.cos(angTc0 + dA * i / 96), Ro * math.sin(angTc0 + dA * i / 96)) for i in range(97)]
+    out = [(Ro * math.cos(angTc0 + dA * i / PORT_ARC_N), Ro * math.sin(angTc0 + dA * i / PORT_ARC_N)) for i in range(PORT_ARC_N + 1)]
     out += arc(c1o["C"], rf, c1o["Tc"], c1o["Tl"], n_arc)
     if hasInner:
         out += arc(c1i["C"], rf, c1i["Tl"], c1i["Tc"], n_arc)
@@ -197,7 +212,7 @@ def filleted_port(p, a0, a1, rf, n_arc=12):
             d -= TAU
         while d <= -TAU:
             d += TAU
-        out += [(p["e"] + Ri * math.cos(f1 + d * i / 96), Ri * math.sin(f1 + d * i / 96)) for i in range(1, 96)]
+        out += [(p["e"] + Ri * math.cos(f1 + d * i / PORT_ARC_N), Ri * math.sin(f1 + d * i / PORT_ARC_N)) for i in range(1, PORT_ARC_N)]
         out.append(c0i["Tc"])
         out += arc(c0i["C"], rf, c0i["Tc"], c0i["Tl"], n_arc)
     else:
@@ -206,7 +221,7 @@ def filleted_port(p, a0, a1, rf, n_arc=12):
 
     waste = []
     for c in ([c0o, c1o, c0i, c1i] if hasInner else [c0o, c1o]):
-        poly = [c["Tl"]] + arc(c["C"], rf, c["Tl"], c["Tc"], n_arc) + arc(c["ctr"], c["rad"], c["Tc"], c["K"], 6)
+        poly = [c["Tl"]] + arc(c["C"], rf, c["Tl"], c["Tc"], n_arc) + arc(c["ctr"], c["rad"], c["Tc"], c["K"], FILLET_CORNER_N)
         oa = polygon_area([c["K"]] + poly)
         orient = (oa > 0) - (oa < 0)                     # Math.sign (0 for a degenerate corner)
         for i in range(len(poly) - 1):
@@ -245,7 +260,7 @@ def make_groove(p, edge, direction, len_deg, w, depth):
     r1, r2 = rm - w / 2, rm + w / 2
     b0 = min(edge, edge + direction * len_deg * DEG)
     b1 = max(edge, edge + direction * len_deg * DEG)
-    n = max(1, math.ceil(len_deg / 2))
+    n = max(1, math.ceil(len_deg / GROOVE_PIECE_DEG))
 
     def pt(r, a):
         return (r * math.cos(a), r * math.sin(a))
@@ -290,7 +305,7 @@ def simulate_chamber(p, res, As, Ad) -> dict:
     b = p["b"] * 1e-3
     K, rho, Cd = p["bulk"] * 1e6, p["rho"], p["Cd"]
     pS, pD, pV = p["pIn"] * 1e5, (p["pIn"] + p["dp"]) * 1e5, p["pVap"] * 1e5
-    sub = p.get("simSub") or 12
+    sub = p.get("simSub") or CH_SUB_DEFAULT
     h = dt / w2 / sub
     P, QS, QD, VF = (np.zeros(M) for _ in range(4))
     pc, void = pS, 0.0
@@ -298,7 +313,7 @@ def simulate_chamber(p, res, As, Ad) -> dict:
     def lerp(arr, j, f):
         return arr[j] + (arr[(j + 1) % M] - arr[j]) * f
 
-    for cycle in range(3):
+    for cycle in range(CH_CYCLES):
         for j in range(M):
             qsAcc = qdAcc = 0.0
             for s in range(sub):
@@ -328,7 +343,7 @@ def simulate_chamber(p, res, As, Ad) -> dict:
                             if not (F(hi) < 0):
                                 break
                             hi *= 2
-                        for _ in range(60):
+                        for _ in range(CH_BISECT):
                             mid = 0.5 * (lo + hi)
                             if F(mid) > 0:
                                 hi = mid
@@ -388,12 +403,12 @@ def analyse_ports(p, res, L) -> dict:
         push("warn", "Port reaches shaft bore")
 
     M, dt, polys = res["M"], res["dt"], res["polys"]
-    disk = circle_poly((p["e"], 0.0), p["portRi"], 128) if p["portRi"] > 0 else None
+    disk = circle_poly((p["e"], 0.0), p["portRi"], DISK_N) if p["portRi"] > 0 else None
     As = np.array([open_area(polys[j], out["suction"], disk) for j in range(M)])
     Ad = np.array([open_area(polys[j], out["delivery"], disk) for j in range(M)])
     out["As"], out["Ad"] = As, Ad
 
-    tol = 1e-4 * res["Amax"]
+    tol = OPEN_TOL_REL * res["Amax"]
     cross = 0
     trappedSwing, inTrap, trapStart = 0.0, False, 0.0
     for j in range(M):
@@ -408,6 +423,7 @@ def analyse_ports(p, res, L) -> dict:
             inTrap = False
     out["crossDeg"] = cross * dt * 180 / math.pi
     push("err" if cross > 0 else "ok", "Cross-porting" if cross > 0 else "No cross-porting")
+    out["trappedVolumeSwing"] = trappedSwing / (res["Amax"] - res["Amin"])  # fraction of the stroke (as JS)
     if 100 * trappedSwing / (res["Amax"] - res["Amin"]) > 2:
         push("warn", "Trapped volume change")
 
@@ -430,6 +446,7 @@ def analyse_ports(p, res, L) -> dict:
         if p.get("leakOn"):
             push("warn" if 100 * (1 - qMean / qTheo) > 10 else "ok", "Volumetric efficiency")
         over = (pMax - sim["pD"]) / max(sim["pD"] - sim["pS"], 1e4)
+        out["pressureOvershoot"] = over
         push("warn" if over > 0.2 else "ok", "Pressure overshoot" if over > 0.2 else "Pressure peaks")
         if vfMax > 0.005:
             push("warn", "Cavitation / incomplete filling")

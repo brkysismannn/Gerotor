@@ -5,10 +5,20 @@ Kinematic viscosity - ASTM D341 (Ubbelohde-Walther):
 Two points -> exact A, B; three or more -> least squares in Walther coordinates.
 Density - linear thermal expansion rho(T) = rho15 (1 - 6.5e-4 (T - 15)).
 Units: nu in cSt (mm^2/s), T in deg C, rho in kg/m^3. Use ``nu_si = nu * 1e-6`` for m^2/s.
+
+Source status of the library (owner rule no-unexplained-numbers, company/memory/oil-library-sourcing):
+every OILS row carries ``source[q]`` for q in nu40, nu100, rho15 with status
+    "standard"   ISO VG nu40 = grade midpoint of ISO 3448 (clause not verified),
+    "cited"      transcribed from a supplier datasheet in References/Oil-Datasheets/sources.md,
+    "unsourced"  typical value without a source (all other values today).
+A calculation that uses a row with an unsourced value is NOT FOR CERTIFICATION (api/calc.oil_check).
+``load_sources`` reads sources.md (Markdown table: key | quantity | value | unit | file | page);
+``apply_sources`` replaces the "unsourced" tag (and the value) by the cited datasheet value.
 """
 from __future__ import annotations
 
 import math
+import pathlib
 
 OILS = {
     "vg10": dict(group="Hydraulic (ISO VG)", label="ISO VG 10 (HLP 10)", nu40=10, nu100=2.6, rho15=850),
@@ -33,6 +43,96 @@ OILS = {
     "mil23699": dict(group="Other", label="MIL-PRF-23699 turbine oil", nu40=25, nu100=5.0, rho15=1000),
     "mil5606": dict(group="Other", label="MIL-PRF-5606 aviation hydraulic", nu40=14, nu100=5.2, rho15=860),
 }
+
+QUANTITIES = ("nu40", "nu100", "rho15")
+_UNIT_FACTOR = {"nu40": {"cst": 1.0, "mm2/s": 1.0, "mm^2/s": 1.0, "mm\u00b2/s": 1.0},
+                "nu100": {"cst": 1.0, "mm2/s": 1.0, "mm^2/s": 1.0, "mm\u00b2/s": 1.0},
+                "rho15": {"kg/m3": 1.0, "kg/m^3": 1.0, "kg/m\u00b3": 1.0, "g/cm3": 1000.0, "g/cm^3": 1000.0,
+                          "g/cm\u00b3": 1000.0, "g/ml": 1000.0, "kg/l": 1000.0}}  # SI definitions
+
+
+def _tag_library():
+    for key, o in OILS.items():
+        o["source"] = {q: {"status": "unsourced", "ref": None} for q in QUANTITIES}
+        o["flags"] = []
+        if o["group"] == "Hydraulic (ISO VG)" and key.startswith("vg"):
+            o["source"]["nu40"] = {"status": "standard",
+                                   "ref": "ISO 3448 viscosity grade: ISO VG %s = midpoint kinematic viscosity at "
+                                          "40 C [cSt] (clause not verified)" % key[2:]}
+    OILS["mil23699"]["flags"].append(
+        "suspicious: rho15 = 1000 kg/m^3 for MIL-PRF-23699 is unverified (it equals the density of water); "
+        "check against a product datasheet before use")
+
+
+_tag_library()
+
+_ROOT = pathlib.Path(__file__).resolve().parents[2]
+SOURCES_MD = next((d / "References" / "Oil-Datasheets" / "sources.md" for d in (_ROOT.parent, _ROOT)
+                   if (d / "References" / "Oil-Datasheets").is_dir()),
+                  _ROOT.parent / "References" / "Oil-Datasheets" / "sources.md")
+
+
+def load_sources(path=None) -> list[dict]:
+    """Rows of the sources.md table (key, quantity, value, unit, file, page); [] if the file is absent.
+
+    Header and separator rows are skipped; rows with a non-numeric value are returned with
+    ``error`` so that a transcription mistake is visible instead of silently ignored."""
+    path = pathlib.Path(path) if path is not None else SOURCES_MD
+    if not path.is_file():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 6 or cells[0].lower() == "key" or set("".join(cells)) <= set("-: "):
+            continue
+        key, qty, val, unit, file, page = cells[:6]
+        row = {"key": key, "quantity": qty, "unit": unit, "file": file, "page": page}
+        try:
+            row["value"] = float(val.replace(",", "."))
+        except ValueError:
+            row["error"] = f"value {val!r} is not a number"
+        rows.append(row)
+    return rows
+
+
+def apply_sources(rows, oils=None) -> dict:
+    """Replace "unsourced" tags (and values) of ``oils`` (default OILS) by the cited datasheet rows.
+
+    Returns {"applied": [...], "ignored": [...]}; ignored = unknown key / quantity / unit or bad value."""
+    oils = OILS if oils is None else oils
+    applied, ignored = [], []
+    for r in rows:
+        o, q = oils.get(r.get("key")), r.get("quantity")
+        f = _UNIT_FACTOR.get(q, {}).get((r.get("unit") or "").lower())
+        if o is None or q not in QUANTITIES or f is None or "error" in r:
+            ignored.append(dict(r, reason=r.get("error") or "unknown key, quantity or unit"))
+            continue
+        v = r["value"] * f
+        prev = o[q]
+        o[q] = v
+        o["source"][q] = {"status": "cited", "ref": f"{r['file']}, p. {r['page']}", "file": r["file"],
+                          "page": r["page"], "replacedValue": prev if prev != v else None}
+        if q == "rho15":
+            o["flags"] = [x for x in o["flags"] if "rho15" not in x]
+        applied.append(r)
+    return {"applied": applied, "ignored": ignored}
+
+
+SOURCES_APPLIED = apply_sources(load_sources())
+
+
+def oil_source_status(key) -> dict:
+    """{key, label, unsourced[], standard[], cited[], flags[]} of an OILS row (None if unknown)."""
+    o = OILS.get(key)
+    if not o:
+        return None
+    by = {st: [q for q in QUANTITIES if o["source"][q]["status"] == st] for st in ("unsourced", "standard", "cited")}
+    return {"key": key, "label": o["label"], **by, "flags": list(o["flags"]),
+            "sources": {q: dict(o["source"][q]) for q in QUANTITIES}}
+
 
 NU_MIN = 2.0  # lower validity limit of the 0.7 form [cSt]
 
@@ -88,7 +188,8 @@ def oil_properties(key, tC):
     if not o:
         return None
     return {"nu": viscosity_at(o["nu40"], o["nu100"], tC), "rho": density_at(o["rho15"], tC),
-            "label": o["label"], "fit": walther_fit(o["nu40"], o["nu100"])}
+            "label": o["label"], "fit": walther_fit(o["nu40"], o["nu100"]),
+            "source": {q: o["source"][q]["status"] for q in QUANTITIES}}
 
 
 def user_oil(p, tC):

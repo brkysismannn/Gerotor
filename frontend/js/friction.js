@@ -14,6 +14,11 @@
  *   Lateral ring (two faces, gap h per face):  M = μ·π·ω·(R⁴ − r⁴) / h
  *     outer rotor: r = Rv … R = OD/2 (ω2);  inner rotor: r = bore/2 … R = root radius (ω1)
  *
+ * Named assumption A-D6 JOURNAL_SYMMETRIC (same as gerotor_core.friction): by default the pressure load W is split W/2 per
+ * bearing and `jbLen` is the TOTAL length of two equal bearings (each jbLen/2). Literature variant (Totaro Eq. 8-9, lever
+ * arms): computeMechanical(p, res, {l1, l2, L1, L2}) [mm] gives W_1 = W l2/(l1+l2), W_2 = W l1/(l1+l2) with individual
+ * bearing lengths L1, L2 (radius bore/2 and diametral clearance jbClr for both).
+ *
  * Valid for full-film lubrication; the paper reports underestimation at low speed / high
  * pressure (mixed lubrication) and overestimation at high speed.
  *
@@ -51,7 +56,7 @@
   // Rotors pressed to the floor: single-sided ports without shadow ports or double fill.
   const singleSided = p => p.faceSupport === 'single' && !p.doubleFill && !(p.fillD > 1);
 
-  function computeMechanical(p, res) {
+  function computeMechanical(p, res, journal) {
     const mm = 1e-3, tau = (p.N - 1) / p.N;
     const mu = p.nu * 1e-6 * p.rho;
     const w1 = p.rpm * TAU / 60, w2 = w1 * tau;
@@ -79,7 +84,20 @@
 
     let Mjb = 0, epsJb = 0;
     const cJb = Math.max(0, p.jbClr) / 2 * mm, Ljb = Math.max(0, p.jbLen) * mm, Rjb = p.bore / 2 * mm;
-    if (cJb > 0 && Ljb > 0 && Rjb > 0 && w1 > 0) {
+    if (journal) {
+      // Lever-arm variant (A-D6 literature): W split by the arms l1, l2; bearing lengths L1, L2.
+      const l1 = Number(journal.l1), l2 = Number(journal.l2), L1 = Number(journal.L1) * mm, L2 = Number(journal.L2) * mm;
+      if (cJb > 0 && Rjb > 0 && w1 > 0 && l1 + l2 > 0) {
+        epsJb = 0;
+        for (const [Wk, Lk] of [[W * l2 / (l1 + l2), L1], [W * l1 / (l1 + l2), L2]]) {
+          if (Lk > 0) {
+            const ek = solveEccentricity(Wk, mu, w1, Rjb, Lk, cJb);
+            Mjb += journalTorque(mu, w1, Rjb, Lk, cJb, ek);
+            epsJb = Math.max(epsJb, ek);
+          }
+        }
+      }
+    } else if (cJb > 0 && Ljb > 0 && Rjb > 0 && w1 > 0) {
       // Two equal bearings sharing the load, each of length Ljb/2.
       epsJb = solveEccentricity(W / 2, mu, w1, Rjb, Ljb / 2, cJb);
       Mjb = 2 * journalTorque(mu, w1, Rjb, Ljb / 2, cJb, epsJb);

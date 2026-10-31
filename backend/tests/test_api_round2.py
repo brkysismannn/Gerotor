@@ -147,7 +147,7 @@ def test_methods_registry_complete():
     known = set(report.ASSUMPTIONS)
     for key, m in METHODS.items():
         assert m["method"] and m["equations"], key
-        assert m["sources"] and all(s["ref"] and s["kind"] in ("literature", "standard", "derivation")
+        assert m["sources"] and all(s["ref"] and s["kind"] in ("literature", "standard", "derivation", "numerical-justified", "user input", "validation", "unverified", "unsourced")
                                     for s in m["sources"]), key
         assert set(m["assumptions"]) <= known, key
         for f in m["functions"]:
@@ -164,7 +164,7 @@ def test_report_methods_and_acceptance():
     assert "ASTM D341 (Ubbelohde-Walther)" in by["fluid"]["references"]
     assert by["contact"]["assumptions"] == ["A-D8a", "A-D8b"]
     ac = j["acceptanceCriteria"]
-    assert ac["status"] == "pending" and ac["evaluated"] is False and ac["criteria"] == []
+    assert ac["evaluated"] is True and ac["overall"] == "INCOMPLETE" and ac["profileId"] == "generic"
     assert j["metadata"]["signOff"]["author"]["name"] and j["metadata"]["scope"]
 
 
@@ -179,7 +179,7 @@ def test_example_v2_valid_and_v1_migrates():
     v1["metadata"]["checker"] = "QA"
     doc = project.load(v1)
     md = doc["metadata"]
-    assert doc["schema"] == "gerotor-project/3" and md["scope"] == ""
+    assert doc["schema"] == "gerotor-project/4" and md["scope"] == ""
     assert md["revisions"] == [{"rev": "A", "date": "2026-10-30", "author": "Design and Simulation Engineer",
                                 "description": "migrated from gerotor-project/1"}]
     assert md["signOff"]["checker"] == {"name": "QA", "date": ""}
@@ -195,5 +195,5 @@ def test_schema_v2_rejects_bad_signoff_and_criteria_status():
     d["metadata"]["signOff"]["approver"] = {"name": "X", "date": "30.10.2026"}
     assert project.validate(d)
     d = copy.deepcopy(EXAMPLE)
-    d["settings"]["acceptanceCriteria"]["status"] = "passed"
+    d["settings"]["acceptanceCriteria"]["activeProfileId"] = "passed"
     assert project.validate(d)

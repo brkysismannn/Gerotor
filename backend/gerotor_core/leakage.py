@@ -44,8 +44,17 @@ def slot_conductance(w, h, mu, L):
 
 RHO_EQ_CAP_MM = 1e4
 
+# Numerical settings (values = JS tool; convergence evidence: docs/convergence.md).
+NET_SUB_DEFAULT = 6   # N08 network sub-steps per grid step (if design simSub absent)
+NET_SWEEPS = 3        # N08 Gauss-Seidel sweeps per sub-step (3-pass leakage loop)
+NET_CYCLES = 3        # N08 revolutions to periodic steady state (last recorded)
+NET_BISECT = 50       # N08 implicit-Euler bisections per chamber
+OUT_SUB = 8           # N09 outlet-volume sub-steps
+OUT_CYCLES = 4        # N09 outlet-volume revolutions
+OUT_BISECT = 60       # N09 outlet-volume bisections
 
-def contact_rho_eq(p, phi, cap: float = RHO_EQ_CAP_MM) -> float:
+
+def contact_rho_eq(p, phi, cap: float | None = None) -> float:
     """Equivalent radius of curvature [mm] at the lobe / inner-profile contact.
 
     Lobe radius rp (convex) against the inner profile of signed radius rho_t - rp
@@ -58,6 +67,7 @@ def contact_rho_eq(p, phi, cap: float = RHO_EQ_CAP_MM) -> float:
     (Persson / Johnson ch.5 conformal cylinders) - not implemented; use ``hertz_validity`` in
     contact.py (a / rho_eq) to flag such points. Also used by the tip-gap conductance.
     """
+    cap = RHO_EQ_CAP_MM if cap is None else cap
     rt = trochoid_curvature_radius(p, phi)
     ri = rt - p["rp"]
     inv = 1 / p["rp"] + 1 / ri
@@ -91,9 +101,9 @@ def simulate_network(p, res, As, Ad, ports=None) -> dict:
     K, rho, Cd = p["bulk"] * 1e6, p["rho"], p["Cd"]
     mu = p["nu"] * 1e-6 * rho
     pS, pD, pV = p["pIn"] * 1e5, (p["pIn"] + p["dp"]) * 1e5, p["pVap"] * 1e5
-    sub = p.get("simSub") or 6
+    sub = p.get("simSub") or NET_SUB_DEFAULT
     h = dt / w2 / sub
-    sweeps = 3
+    sweeps = NET_SWEEPS
     leak = bool(p.get("leakOn"))
 
     hTip = max(0.0, p["c"]) * 1e-3 if leak else 0.0
@@ -144,8 +154,8 @@ def simulate_network(p, res, As, Ad, ports=None) -> dict:
             return 0.0
         return Cd * Ao * math.sqrt(2 * d / rho) if d > 0 else -Cd * Ao * math.sqrt(2 * -d / rho)
 
-    for cycle in range(3):
-        last = cycle == 2
+    for cycle in range(NET_CYCLES):
+        last = cycle == NET_CYCLES - 1
         for j in range(M):
             acc = dict(qs0=0.0, qd0=0.0, out=0.0, inn=0.0, tip=0.0, bore=0.0, per=0.0)
             for s in range(sub):
@@ -193,7 +203,7 @@ def simulate_network(p, res, As, Ad, ports=None) -> dict:
                             if not (F(hi) < 0):
                                 break
                             hi *= 2
-                        for _ in range(50):
+                        for _ in range(NET_BISECT):
                             mid = 0.5 * (lo + hi)
                             if F(mid) > 0:
                                 hi = mid
@@ -266,16 +276,16 @@ def outlet_ripple(p, res, sim) -> dict | None:
         PD = pS + rho / 2 * (np.maximum(Q, 0) / (Cd * Ar)) ** 2
     else:
         PD = np.zeros(M)
-        sub = 8
+        sub = OUT_SUB
         h = T / sub
         x = sim["pD"]
-        for _ in range(4):
+        for _ in range(OUT_CYCLES):
             for j in range(M):
                 q = Q[j]
                 for _s in range(sub):
                     x0 = x
                     lo, hi = min(x0, pS) - 1e7, max(x0, sim["pD"]) * 2 + 1e7
-                    for _it in range(60):
+                    for _it in range(OUT_BISECT):
                         m = 0.5 * (lo + hi)
                         if C * (m - x0) / h + Qr(m) - q > 0:
                             hi = m

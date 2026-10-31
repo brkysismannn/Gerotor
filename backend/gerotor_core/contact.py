@@ -10,7 +10,8 @@ The free-running outer rotor is balanced by the contact force: F_n arm_o = sum T
 Hertz line contact (length b), 1/E* = (1-nu1^2)/E1 + (1-nu2^2)/E2:
     p_max = sqrt(F E* / (pi b rho_eq)),  a = sqrt(4 F rho_eq / (pi b E*))   (Johnson, Contact Mechanics)
 Sliding velocity v_s = (omega1/N) |P - I|, I = pitch point (N e, 0).
-Wear-rate proportional factor (Ivanovic 2020, after Colbourne): WRPF = p_max v_s.
+Wear-rate proportional factor WRPF = p_max v_s: provenance UNVERIFIED (attributed to Ivanovic 2020,
+not on the desk; Colbourne 1974/1975 and the Ivanovic 2021 chapter do not contain it).
 Named assumptions (researcher review 2026-10-30):
 A-D8a HERTZ_SINGLE_LOBE: the whole outer-rotor balancing force F_n acts on one lobe (Totaro 2025
       p.4 single-contact hypothesis). During the short double-contact intervals (Ivanovic 2012
@@ -31,7 +32,9 @@ from . import backlash as _bl
 from .geometry import TAU, chamber, lobe_limits
 from .leakage import contact_rho_eq
 
-from .errors import require_analysis
+LOBE_PROBE_LAG = 1e-7  # C10 probe lag [rad] that picks the first lobe to close (docs/convergence.md)
+
+from .errors import require_analysis, require_design
 
 
 def e_star(E1, nu1, E2, nu2):
@@ -64,7 +67,7 @@ def contact_lobe(p, t, buf, delta=None) -> int:
     if delta is not None and p["c"] > 0:
         _bl.gaps_at(p, t, delta, buf)
     else:
-        _bl.gaps_at(dict(p, c=0), t, 1e-7, buf)
+        _bl.gaps_at(dict(p, c=0), t, LOBE_PROBE_LAG, buf)
     return int(np.argmin(buf))
 
 
@@ -82,8 +85,9 @@ def compute_contact(p, res, quasi_static: bool = False, gauge=None) -> dict:
     L = lobe_limits(p)
     b, dpPa = p["b"] * 1e-3, p["dp"] * 1e5
     w1 = p["rpm"] * TAU / 60
-    Es = e_star((p.get("Ein") or 210) * 1e9, 0.3 if p.get("nuIn") is None else p["nuIn"],
-                (p.get("Eout") or 210) * 1e9, 0.3 if p.get("nuOut") is None else p["nuOut"])
+    # Rotor materials are user inputs (no fallback: the former 210 GPa / 0.3 had no source, audit C03).
+    require_design(p, "compute_contact (rotor material)", ("Ein", "nuIn", "Eout", "nuOut"))
+    Es = e_star(p["Ein"] * 1e9, p["nuIn"], p["Eout"] * 1e9, p["nuOut"])
     ports = res.get("ports")
     sim = ports.get("sim") if (not quasi_static and ports) else None
     if gauge is None:

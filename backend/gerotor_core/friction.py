@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import math
 
-from .errors import require_analysis
+from .errors import require_analysis, require_design
+
+ECC_BISECT = 100  # N11 eccentricity bisections (numerical setting, docs/convergence.md)
 
 TAU = 2 * math.pi
 
@@ -44,7 +46,7 @@ def solve_eccentricity(W, mu, w, R, L, c) -> float:
     if not (W > 0) or not (w > 0):
         return 0.0
     lo, hi = 0.0, 1 - 1e-12
-    for _ in range(100):
+    for _ in range(ECC_BISECT):
         m = 0.5 * (lo + hi)
         if ocvirk_load(mu, w, R, L, c, m) < W:
             lo = m
@@ -106,7 +108,9 @@ def compute_mechanical(p, res, journal: dict | None = None) -> dict:
         MoutRad = journal_torque(mu, w2, p["OD"] / 2 * mm, L, cOut, epsOut)
     MoutLat = ring_torque(mu, w2, p["Rv"] * mm, p["OD"] / 2 * mm, hLat)
     MinLat = ring_torque(mu, w1, p["bore"] / 2 * mm, p["innerRoot"] * mm, hLat)
-    muF = max(0.0, p.get("faceMu") or 0)
+    if single:  # faceMu is a user input (no default, audit C08); only single-sided ports need it
+        require_design(p, "compute_mechanical (single-sided Coulomb floor friction)", ("faceMu",))
+    muF = max(0.0, p["faceMu"]) if single else 0.0
     MoutFloor = coulomb_ring_torque(muF, dp / 2, p["Rv"] * mm, p["OD"] / 2 * mm) if single else 0.0
     MinFloor = coulomb_ring_torque(muF, dp / 2, p["bore"] / 2 * mm, p["innerRoot"] * mm) if single else 0.0
 

@@ -80,7 +80,7 @@
 "rhoMin": 11.66137577399393,
 "psiContactMax": 0.9452610177701664,
 "tipSpeed": 7.686848904803504,
-"filletClearance": 0.5385577026169912,
+"filletClearance": 0.42652907613524604,
 "M": 144,
 "dt": 0.04363323129985824,
 "chamberOffset": 0.3490658503988659,
@@ -528,24 +528,28 @@
 "Fillet clearance"
 ],
 [
-"warn",
-"Sharp inner rotor tips"
+"ok",
+"No undercut"
+],
+[
+"info",
+"Sharp inner rotor tips - NOT EVALUATED"
 ],
 [
 "ok",
 "Tip-to-valley clearance"
 ],
 [
-"ok",
-"Outer rotor wall"
+"info",
+"Outer rotor wall - NOT EVALUATED"
 ],
 [
-"ok",
-"Inner rotor wall"
+"info",
+"Inner rotor wall - NOT EVALUATED"
 ],
 [
-"ok",
-"Tip speed"
+"info",
+"Tip speed - NOT EVALUATED"
 ],
 [
 "ok",
@@ -556,20 +560,24 @@
 "Cross-porting"
 ],
 [
-"ok",
-"Inlet port velocity"
+"info",
+"Trapped volume change - NOT EVALUATED"
 ],
 [
-"ok",
-"Volumetric efficiency"
+"info",
+"Inlet port velocity - NOT EVALUATED"
 ],
 [
-"ok",
-"Pressure peaks"
+"info",
+"Volumetric efficiency - NOT EVALUATED"
 ],
 [
-"ok",
-"No cavitation"
+"info",
+"Pressure overshoot - NOT EVALUATED"
+],
+[
+"info",
+"Cavitation / incomplete filling - NOT EVALUATED"
 ],
 [
 "warn",
@@ -2878,7 +2886,7 @@
 6.139886200557492
 ]
 },
-"crossDeg": 5,
+"crossDeg": 7.499999999999999,
 "inletVelocity": 0.25597097853746775,
 "suctionArea": 1025.5844334634098,
 "deliveryArea": 1025.5861999355493,

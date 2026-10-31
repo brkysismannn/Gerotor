@@ -23,7 +23,7 @@
 
   function read() {
     const o = {};
-    for (const el of form.elements) if (el.name) o[el.name] = parseFloat(el.value);
+    for (const el of form.elements) if (el.name) o[el.name] = G.num.parse(el.value);
     o.nRpm = Math.max(1, Math.round(o.nRpm)); o.nDp = Math.max(1, Math.round(o.nDp));
     return o;
   }
@@ -135,12 +135,18 @@
     if (!params.portsOn) { $('maxStatus').textContent = 'Enable the port model to estimate the filling-limited speed.'; return; }
     $('maxStatus').textContent = 'Computing…';
     setTimeout(() => {
-      const m = G.maxSpeed(params, res);
-      const inlet = `inlet port velocity reaches 2 m/s at ${m.rpmInlet.toFixed(0)} rpm; ` +
+      // Limits come from the user's acceptance criteria only (empty = NOT EVALUATED; no built-in numbers).
+      const ac = G.workspace ? G.workspace.state().settings.acceptanceCriteria : null;
+      const vVoid = G.criteria ? G.criteria.limitValue(ac, 'C-CAV-VOID') : null, vIn = G.criteria ? G.criteria.limitValue(ac, 'C-PORT-V-IN') : null;
+      const gds = G.gdsCavitationLimits(params, res);
+      const gdsTxt = `GDS criteria: ${gds.rpm.toFixed(0)} rpm (${gds.basis}; tip ${gds.rpmTip.toFixed(0)}, gallery ${gds.rpmGallery.toFixed(0)} rpm)`;
+      if (vVoid === null) { $('maxStatus').textContent = `Filling-limited max speed: NOT EVALUATED (no limit entered in criterion C-CAV-VOID). ${gdsTxt}.`; return; }
+      const m = G.maxSpeed(params, res, { voidLimit: vVoid, inletVelocityLimit: vIn === null ? undefined : vIn });
+      const inlet = (m.rpmInlet === null ? 'inlet velocity speed: NOT EVALUATED (no limit in criterion C-PORT-V-IN); ' : `inlet port velocity reaches ${vIn} m/s at ${m.rpmInlet.toFixed(0)} rpm; `) +
         `GDS criteria: ${m.gds.rpm.toFixed(0)} rpm (${m.gds.basis}; tip ${m.gds.rpmTip.toFixed(0)}, gallery ${m.gds.rpmGallery.toFixed(0)} rpm)`;
       $('maxStatus').textContent = Number.isNaN(m.rpm)
-        ? `Chamber void exceeds 0.5 % already at ${m.below} rpm; raise the inlet pressure or retime the suction port. ${inlet}.`
-        : `Filling-limited max speed ≈ ${m.rpm.toFixed(0)} rpm${m.above ? '+' : ''} (peak void 0.5 %, Δp ${params.dp} bar, inlet ${params.pIn} bar abs); ${inlet}.`;
+        ? `Chamber void exceeds the C-CAV-VOID limit already at ${m.below} rpm; raise the inlet pressure or retime the suction port. ${inlet}.`
+        : `Filling-limited max speed ≈ ${m.rpm.toFixed(0)} rpm${m.above ? '+' : ''} (peak void limit ${(100 * vVoid).toPrecision(3)} %, Δp ${params.dp} bar, inlet ${params.pIn} bar abs); ${inlet}.`;
     }, 30);
   });
 

@@ -11,7 +11,7 @@
   const status = t => { $('omStatus').textContent = t; };
 
   function range() {
-    const f = $('mapForm'), v = n => parseFloat(f.elements[n].value);
+    const f = $('mapForm'), v = n => G.num.parse(f.elements[n].value);
     return { rpmMin: v('rpmMin'), rpmMax: v('rpmMax'), nRpm: Math.round(v('nRpm')), dpMin: v('dpMin'), dpMax: v('dpMax'), nDp: Math.round(v('nDp')) };
   }
 

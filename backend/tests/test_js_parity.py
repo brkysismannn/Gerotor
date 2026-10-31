@@ -11,6 +11,8 @@ import pathlib
 import numpy as np
 import pytest
 
+from api.criteria import NEUTRALIZED_CHECKS, neutralize_checks
+from examples import EXAMPLE_MATERIAL
 from gerotor_core import fluid, geometry, perfmap, ports, reverse, spectrum
 
 REF = pathlib.Path(__file__).parent / "reference"
@@ -92,7 +94,9 @@ def compare(py, ref, path, errors, scale=None, key=None):
 @pytest.fixture(scope="module", params=CASES)
 def case(request):
     ref = json.loads((REF / f"{request.param}.json").read_text(encoding="utf-8"))
-    p = geometry.derive(ref["params"])
+    # The JS references were generated with the contact.js material fallback (210 GPa / 0.3); the
+    # backend has no fallback, so the same values are supplied here as EXAMPLE inputs.
+    p = geometry.derive(dict(EXAMPLE_MATERIAL, **ref["params"]))
     r = geometry.analyse(p, **ref["opts"])
     return request.param, ref, p, r
 
@@ -111,7 +115,16 @@ def test_derive(case):
 def test_analysis_core(case):
     _, ref, p, r = case
     check({k: r.get(k) for k in ref["res"] if k != "checks"}, {k: v for k, v in ref["res"].items() if k != "checks"}, "res")
-    assert [(c["level"], c["title"]) for c in r["checks"]] == [tuple(c) for c in ref["res"]["checks"]]
+    # The JS tool (criteria.js) now emits unsourced verdicts as info rows "<title> - NOT EVALUATED" linked
+    # to a criterion id; the core keeps the raw verdicts (JS parity of values). Compare (a) all verdicts
+    # that are not neutralised exactly and (b) the criterion ids: every core verdict that the API
+    # neutralises must be one of the JS NOT EVALUATED criteria.
+    ne = " - NOT EVALUATED"
+    py = neutralize_checks(r["checks"])
+    js = [tuple(c) for c in ref["res"]["checks"]]
+    assert [(c["level"], c["title"]) for c in py if not c["title"].endswith(ne)] == [c for c in js if not c[1].endswith(ne)]
+    js_ids = {NEUTRALIZED_CHECKS[t[: -len(ne)]] for _l, t in js if t.endswith(ne)}
+    assert {c["criterion"] for c in py if c["title"].endswith(ne)} <= js_ids
 
 
 def test_lobe_tool_chamber(case):

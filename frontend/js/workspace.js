@@ -52,6 +52,7 @@
     contact: ['Contact', 'Material data for the Hertz contact between the rotors.'],
     friction: ['Friction', 'Viscous and floor friction (Totaro et al. 2025); full-film lubrication assumed. Clearances are diametral.'],
     map: ['Performance map', 'Speed x pressure sweep with charts, Excel and CSV export.'],
+    criteria: ['Acceptance criteria', 'Profile, limits, safety factors and material allowables. The software ships NO limit values: every value you enter is recorded as an override with reason, user and time. Final acceptance rests with your certifying authority or customer.'],
     outputs: ['Outputs', 'Drawings (PDF), CAD (STEP AP242, DXF, SVG), point data and the OpenModelica system model.'],
   };
   const openTabs = ['geometry', 'ports', 'fluid'];
@@ -68,7 +69,8 @@
         { label: 'Leakage', tab: 'leakage', mod: 'leakage' },
         { label: 'Contact', tab: 'contact', mod: 'contact' },
         { label: 'Friction', tab: 'friction', mod: 'friction' },
-        { label: 'Performance map', tab: 'map', mod: 'map' } ] },
+        { label: 'Performance map', tab: 'map', mod: 'map' },
+        { label: 'Acceptance criteria', tab: 'criteria', mod: 'criteria' } ] },
       { label: 'Output', kids: [
         { label: 'Calculation report', cmd: 'report', mod: 'report' },
         { label: 'Drawings & CAD', tab: 'outputs', mod: 'cad' },
@@ -85,13 +87,14 @@
 
   function renderTabs() {
     $('tabs').innerHTML = openTabs.map(id => `<button type="button" role="tab" data-tab="${id}" class="${id === curTab ? 'active' : ''}">${esc(TABS[id][0])}<span class="x" data-close="${id}" title="Close tab">×</span></button>`).join('');
-    $('stepIntro').textContent = TABS[curTab][1];
+    $('stepIntro').textContent = TABS[curTab][1] + (meta.designLabel ? '  [' + meta.designLabel + ']' : '');
   }
   function showTab(id, scroll) {
     if (!TABS[id]) return;
     if (!openTabs.includes(id)) openTabs.push(id);
     curTab = id; document.body.dataset.step = id;
     renderTabs(); renderTree();
+    if (id === 'criteria') renderCriteria();
     if (scroll) {
       const lg = [...document.querySelectorAll('.centre legend, .centre h2')].find(l => l.textContent.trim().startsWith(scroll));
       if (lg) lg.scrollIntoView({ block: 'start' });
@@ -121,6 +124,7 @@
   }
   $('tree').addEventListener('click', ev => {
     const n = ev.target.closest('.node'); if (!n) return;
+    document.body.classList.remove('tree-open');
     if (n.dataset.cmd) run(n.dataset.cmd); else if (n.dataset.tab) showTab(n.dataset.tab, n.dataset.scroll);
   });
 
@@ -163,6 +167,7 @@
     m.map = $('mapCsv') && !$('mapCsv').disabled ? 'ok' : 'na';
     m.report = ok ? (worst(res.checks) === 'err' ? 'err' : 'ok') : 'na';
     m.cad = ok ? 'ok' : 'na';
+    if (ok && G.criteria && G.criteria.catalogue()) { const o = evalCriteria().overall; m.criteria = o === 'FAIL' ? 'err' : o === 'PASS' ? 'ok' : 'warn'; } else m.criteria = 'na';
     m.modelica = 'na';
     return m;
   }
@@ -192,8 +197,8 @@
     const issues = [];
     const add = (el, level, text) => { setFieldMsg(el, level, text); if (level) issues.push({ level, src: 'Input', text: `${labelOf(el)}: ${text}` }); };
     for (const el of form.elements) {
-      if (el.type !== 'number' || el.disabled) { if (el.type === 'number') setFieldMsg(el, null); continue; }
-      const v = parseFloat(el.value), mn = el.min !== '' ? +el.min : -Infinity, mx = el.max !== '' ? +el.max : Infinity;
+      if (!el.hasAttribute('data-num') || el.disabled) { if (el.hasAttribute('data-num')) setFieldMsg(el, null); continue; }
+      const v = G.num.parse(el.value), mn = el.min !== '' ? +el.min : -Infinity, mx = el.max !== '' ? +el.max : Infinity;
       if (el.value.trim() === '' || !Number.isFinite(v)) add(el, 'err', 'enter a number');
       else if (v < mn) add(el, 'err', `must be >= ${mn}`);
       else if (v > mx) add(el, 'err', `must be <= ${mx}`);
@@ -222,17 +227,17 @@
   function renderCaseList() {
     $('caseList').innerHTML = '<thead><tr><th>#</th><th>Name</th><th>rpm</th><th>Δp bar</th><th>Oil T °C</th><th>p_in bar abs</th></tr></thead><tbody>' +
       cases.map((c, i) => `<tr data-i="${i}" class="${i === active ? 'sel' : ''}"><td>${i + 1}</td><td><input data-f="name" value="${esc(c.name)}"></td>` +
-        ['rpm', 'dp', 'oilT', 'pIn'].map(k => `<td><input data-f="${k}" type="number" step="any" value="${esc(c[k])}"></td>`).join('') + '</tr>').join('') + '</tbody>';
+        ['rpm', 'dp', 'oilT', 'pIn'].map(k => `<td><input data-f="${k}" type="text" inputmode="decimal" data-num step="any" value="${esc(c[k])}"></td>`).join('') + '</tr>').join('') + '</tbody>';
   }
   $('caseList').addEventListener('click', ev => {
     const tr = ev.target.closest('tr[data-i]'); if (!tr || +tr.dataset.i === active) return;
     selectCase(+tr.dataset.i);
   });
-  $('caseList').addEventListener('input', ev => {
+  $('caseList').addEventListener('change', ev => {
     const inp = ev.target, tr = inp.closest('tr[data-i]'); if (!tr) return;
     const i = +tr.dataset.i, k = inp.dataset.f;
-    cases[i][k] = k === 'name' ? inp.value : parseFloat(inp.value);
-    if (i === active && k !== 'name' && Number.isFinite(cases[i][k])) { form.elements[k].value = cases[i][k]; A.recompute(); }
+    cases[i][k] = k === 'name' ? inp.value : G.num.parse(inp.value);
+    if (i === active && k !== 'name' && Number.isFinite(cases[i][k])) { form.elements[k].value = cases[i][k]; A.scheduleRecompute(); }
     lastCaseResults = null; touch('case' + i + k);
   });
   function selectCase(i) {
@@ -258,11 +263,11 @@
       try {
         const o = G.Calc.run(caseRaw(c)), res = o.res, pr = res.ports, ok = !!res.A;
         const stt = G.report.status(res, { params: o.params });
-        r = { name: c.name, rpm: c.rpm, dp: c.dp, oilT: c.oilT, status: stt.text,
+        r = { name: c.name, rpm: c.rpm, dp: c.dp, oilT: c.oilT, status: stt.text, run: { name: c.name, rpm: c.rpm, params: o.params, res },
           flow: ok ? (pr && pr.sim ? pr.flowLpm : res.flowLpm) : NaN, etaV: ok && pr && pr.sim ? pr.portEfficiency * 100 : NaN,
           etaT: ok && res.mech ? res.mech.etaT * 100 : NaN, hertz: ok && res.contact ? res.contact.pmaxMax / 1e6 : NaN,
           torque: ok && res.mech ? res.mech.Mshaft : NaN, power: ok && res.mech ? res.mech.powerIn / 1000 : NaN };
-      } catch (e) { r = { name: c.name, rpm: c.rpm, dp: c.dp, oilT: c.oilT, status: 'INVALID', flow: NaN, etaV: NaN, etaT: NaN, hertz: NaN, torque: NaN, power: NaN, error: e.message }; }
+      } catch (e) { r = { name: c.name, rpm: c.rpm, dp: c.dp, oilT: c.oilT, status: 'INVALID', flow: NaN, etaV: NaN, etaT: NaN, hertz: NaN, torque: NaN, power: NaN, error: e.message, run: { name: c.name, rpm: c.rpm, params: null, res: null } }; }
       out.push(r);
     }
     return out;
@@ -281,13 +286,14 @@
   // ------------------------------------------------------------------ meta form
   const metaForm = $('metaForm');
   function syncMetaForm() {
-    for (const k of ['project', 'partNo', 'revision', 'author', 'checker', 'approver', 'date', 'notes', 'scope']) metaForm.elements[k].value = meta[k] || '';
+    for (const k of ['project', 'partNo', 'revision', 'author', 'checker', 'approver', 'date', 'notes', 'scope', 'designLabel']) metaForm.elements[k].value = meta[k] || '';
     metaForm.elements.calcMode.value = calcMode;
     $('revList').innerHTML = (meta.revisions || []).map(r => `<li><b>${esc(r.rev)}</b> ${esc(r.date)} ${esc(r.author)} - ${esc(r.description)}</li>`).join('');
   }
   metaForm.addEventListener('input', ev => {
     const el = ev.target, k = el.name;
     if (k in meta && k !== 'revisions') meta[k] = el.value;
+    if (k === 'designLabel') renderTabs();
     if (k === 'calcMode') { calcMode = el.value; G.Calc.setMode(el.value); }
     touch('meta' + k);
   });
@@ -314,22 +320,24 @@
     $('stDirty').classList.toggle('on', d);
     $('stCase').textContent = `Case ${active + 1}/${cases.length}: ${cases[active] ? cases[active].name : ''}`;
     $('stMode').textContent = `Engine: ${G.Calc.mode}`;
-    const t = $('titleName'); if (t) t.textContent = `${d ? '* ' : ''}${meta.project || 'Untitled'}${meta.revision ? '  rev ' + meta.revision : ''}${fileLabel ? '  (' + fileLabel + ')' : ''}`;
+    const t = $('titleName'); if (t) t.textContent = `${d ? '* ' : ''}${meta.project || 'Untitled'}${meta.revision ? '  rev ' + meta.revision : ''}${fileLabel ? '  (' + fileLabel + ')' : ''}${meta.designLabel ? '  - ' + meta.designLabel : ''}`;
     for (const [id, can] of [['undo', hist.canUndo()], ['redo', hist.canRedo()]]) document.querySelectorAll(`[data-cmd="${id}"]`).forEach(b => b.classList.toggle('disabled', !can));
   }
-  form.addEventListener('input', ev => {
+  form.addEventListener('change', ev => {          // commit (Enter / blur / select), not every keystroke
     const k = ev.target.name;
     if (['rpm', 'dp', 'oilT', 'pIn'].includes(k) && cases[active]) {
-      const v = parseFloat(ev.target.value); if (Number.isFinite(v)) { cases[active][k] = v; lastCaseResults = null; renderCaseList(); }
+      const v = G.num.parse(ev.target.value); if (Number.isFinite(v)) { cases[active][k] = v; lastCaseResults = null; renderCaseList(); }
     }
     setTimeout(() => touch('f' + k), 40);
   });
 
   function refreshStatus(st) {
     if (!st.res) return;
+    lastEval = null;
     modStatus = computeStatus(st);
     renderTree();
     renderGrid(st);
+    if (curTab === 'criteria' && !$('critRoot').contains(document.activeElement)) renderCriteria();
     live = [];
     const ok = !!(st.res && st.res.A);
     if (ok) for (const c of st.res.checks) if (c.level !== 'ok') live.push({ level: c.level, src: 'Check', text: `${c.title}: ${c.detail}` });
@@ -347,7 +355,7 @@
     if (!G.Calc.setMode(calcMode)) calcMode = G.Calc.mode;
     const c = cases[active] || {};
     A.setDesign(Object.assign({}, st.design, ['rpm', 'dp', 'oilT', 'pIn'].reduce((o, k) => (Number.isFinite(c[k]) && (o[k] = c[k]), o), {})));
-    syncMetaForm(); renderCaseList(); lastCaseResults = null; renderCaseResults();
+    syncMetaForm(); renderCaseList(); lastCaseResults = null; renderCaseResults(); lastEval = null;
     savedStr = snapStr(); hist.reset(savedStr); fileLabel = label || null;
     applying = false;
     refreshStatus(A.getState());
@@ -406,7 +414,7 @@
     if (!snap) return;
     applying = true;
     meta = snap.meta; cases = snap.loadCases; active = snap.activeCase; calcMode = snap.calcMode; settings = snap.settings;
-    A.setDesign(snap.design); syncMetaForm(); renderCaseList();
+    A.setDesign(snap.design); syncMetaForm(); renderCaseList(); lastEval = null;
     applying = false; updateChrome(); refreshStatus(A.getState());
   }
   function undo() { const s = hist.undo(); if (s) { restore(s); hist.setCur(snapStr()); updateChrome(); } }
@@ -417,9 +425,19 @@
     const st = A.getState();
     const s = state();
     const hash = await P.inputHash(s);
+    const resolved = await P.fetchResolved(s);
+    setResolvedStatus(resolved);
     const cr = cases.length > 1 || lastCaseResults ? (lastCaseResults || (lastCaseResults = calcCases())) : null;   // all cases always evaluated for the status
     if (cr) renderCaseResults();
-    return { html: G.report.build(s, st.params, st.res, hash, { caseResults: cr }), hash };
+    const runs = cr ? cr.filter(r => r.run).map(r => r.run) : [];
+    return { html: G.report.build(s, st.params, st.res, hash, { resolved, caseResults: cr, caseRuns: runs.length ? runs : (st.res && cases[active] ? [{ name: cases[active].name, rpm: cases[active].rpm, params: st.params, res: st.res }] : []) }), hash };
+  }
+  function setResolvedStatus(r) {
+    const el = $('stHash'); if (!el) return;
+    el.textContent = r ? `Resolved ${r.inputHash.slice(0, 10)} · ${r.certification ? r.certification.status : '-'}` : 'Document hash only (offline)';
+    el.title = r ? `resolved ${r.inputHash}
+document ${r.documentHash}` : 'The resolved-input hash and certification status need the backend';
+    el.classList.toggle('on', !!(r && r.certification && r.certification.status !== 'NO BLOCKING ITEM FOUND'));
   }
   async function reportPrint() {
     const st = A.getState();
@@ -446,6 +464,7 @@
     A.recompute();
     lastCaseResults = calcCases(); renderCaseResults();
     refreshStatus(A.getState());
+    P.fetchResolved(state()).then(setResolvedStatus);
     const st = G.report.status(A.getState().res, { caseResults: lastCaseResults, params: A.getState().params });
     say(`Calculation complete: ${st.text}${st.reasons.length ? ' (' + st.reasons.join('; ') + ')' : ''}.`, st.valid ? 'info' : 'err');
   }
@@ -468,7 +487,7 @@
     report: reportPrint, reportDl: reportDownload, resultsCsv,
     props: () => showTab('project'),
     mode: () => showTab('project'),
-    toggleTree: () => { document.body.classList.toggle('no-tree'); requestAnimationFrame(() => A.redraw()); },
+    toggleTree: () => { if (window.matchMedia('(max-width: 1000px)').matches) document.body.classList.toggle('tree-open'); else document.body.classList.toggle('no-tree'); requestAnimationFrame(() => A.redraw()); },
     toggleBottom: () => { document.body.classList.toggle('no-bottom'); requestAnimationFrame(() => A.redraw()); },
     dockRotor: () => showDock('rotor'), dockResults: () => showDock('results'), dockChecks: () => showDock('checks'),
     themeLight: () => setTheme('light'), themeDark: () => setTheme('dark'),
@@ -486,9 +505,9 @@
     ['Help', [['Keyboard shortcuts', 'shortcuts', 'F1'], ['Quantities and symbols', 'symbols'], ['About', 'about']]],
   ];
   const IC = { new: 'M6 3h8l4 4v14H6zM14 3v4h4', open: 'M3 7h6l2 2h10v10H3z', save: 'M4 4h13l3 3v13H4zM8 4v5h8V4M8 20v-6h8v6', saveAs: 'M4 4h13l3 3v6M4 4v16h9M8 4v5h8V4M17 15v6M14 18h6',
-    undo: 'M9 7L4 12l5 5M4 12h10a6 6 0 0 1 0 8', redo: 'M15 7l5 5-5 5M20 12H10a6 6 0 0 0 0 8', calc: 'M5 3h14v18H5zM8 7h8M8 12h2M12 12h2M16 12h0M8 16h2M12 16h2', report: 'M6 3h9l4 4v14H6zM9 12h7M9 16h7M9 8h3', assist: 'M12 3a6 6 0 0 0-4 10v3h8v-3a6 6 0 0 0-4-10zM9 20h6' };
+    undo: 'M9 7L4 12l5 5M4 12h10a6 6 0 0 1 0 8', redo: 'M15 7l5 5-5 5M20 12H10a6 6 0 0 0 0 8', calc: 'M5 3h14v18H5zM8 7h8M8 12h2M12 12h2M16 12h0M8 16h2M12 16h2', report: 'M6 3h9l4 4v14H6zM9 12h7M9 16h7M9 8h3', assist: 'M12 3a6 6 0 0 0-4 10v3h8v-3a6 6 0 0 0-4-10zM9 20h6', toggleTree: 'M4 5h16M4 12h16M4 19h16' };
   const icon = n => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${IC[n]}"/></svg>`;
-  const TOOLS = [['new', 'New', 'New'], ['open', 'Open', 'Open (Ctrl+O)'], ['save', 'Save', 'Save (Ctrl+S)'], ['saveAs', 'Save as', 'Save as (Ctrl+Shift+S)'], '|', ['undo', 'Undo', 'Undo (Ctrl+Z)'], ['redo', 'Redo', 'Redo (Ctrl+Y)'], '|', ['calc', 'Calculate', 'Calculate (F5)'], ['report', 'Report', 'Calculation report (Ctrl+P)'], ['assist', 'Assist', 'Design Assist']];
+  const TOOLS = [['new', 'New', 'New'], ['open', 'Open', 'Open (Ctrl+O)'], ['save', 'Save', 'Save (Ctrl+S)'], ['saveAs', 'Save as', 'Save as (Ctrl+Shift+S)'], '|', ['undo', 'Undo', 'Undo (Ctrl+Z)'], ['redo', 'Redo', 'Redo (Ctrl+Y)'], '|', ['calc', 'Calculate', 'Calculate (F5)'], ['report', 'Report', 'Calculation report (Ctrl+P)'], ['assist', 'Assist', 'Design Assist'], '|', ['toggleTree', 'Tree', 'Show / hide the project tree']];
   function renderBars() {
     $('menubar').innerHTML = MENUS.map(([t], i) => `<button type="button" class="mi" data-menu="${i}" role="menuitem">${t}</button>`).join('') + '<span class="titlename" id="titleName"></span>';
     $('toolbar').innerHTML = TOOLS.map(t => t === '|' ? '<span class="sep"></span>' : `<button type="button" class="tb ${t[0] === 'calc' ? 'accent' : ''}" data-cmd="${t[0]}" title="${t[2]}">${icon(t[0])}<span>${t[1]}</span></button>`).join('') +
@@ -528,7 +547,7 @@
   document.addEventListener('keydown', ev => {
     const k = ev.key.toLowerCase(), ctrl = ev.ctrlKey || ev.metaKey;
     if (ev.key === 'Escape') { closeMenu(); return; }
-    const inText = ev.target.matches && ev.target.matches('textarea, input[type=text], input[type=date]');
+    const inText = ev.target.matches && ev.target.matches('textarea, input[type=text], input[type=date], input[data-num]');
     if (ev.key === 'F5') { ev.preventDefault(); run('calc'); }
     else if (ev.key === 'F1') { ev.preventDefault(); run('help'); }
     else if (ctrl && k === 's') { ev.preventDefault(); run(ev.shiftKey ? 'saveAs' : 'save'); }
@@ -547,6 +566,198 @@
   });
   $('caseRun').addEventListener('click', runCases);
 
+  // ------------------------------------------------------------------ acceptance criteria (tab "criteria")
+  // Profiles are templates with EMPTY limits. Every value typed here becomes an Override record
+  // {target, id, field, value, unit, reason, user, timestamp}; the reason is mandatory. Templates are never edited.
+  const CR = () => G.criteria;
+  const acNow = () => settings.acceptanceCriteria || CR().defaultAC();
+  function setAC(next, key) {
+    if (CR().isDefault(next)) delete settings.acceptanceCriteria; else settings.acceptanceCriteria = next;
+    touch(key || 'ac'); lastEval = null; renderCriteria(); refreshModStatus();
+  }
+  let lastEval = null;
+  function critCtx() {
+    const st = A.getState();
+    const runs = lastCaseResults ? lastCaseResults.filter(r => r.run).map(r => r.run)
+      : (st.res && cases[active] ? [{ name: cases[active].name, rpm: cases[active].rpm, params: st.params, res: st.res }] : []);
+    return CR().context(settings, st.params, st.res, runs);
+  }
+  function evalCriteria() {
+    if (!lastEval) lastEval = CR().evaluate(acNow(), critCtx());
+    return lastEval;
+  }
+  function refreshModStatus() {
+    const st = A.getState(); if (!st.res) return;
+    modStatus = computeStatus(st); renderTree();
+  }
+  const fmtv = x => (typeof x === 'number' && Number.isFinite(x) ? String(+x.toPrecision(5)) : '');
+  function critLimitCell(r) {
+    if (r.comparison === 'true') return '<span class="note">predicate</span>';
+    if (r.limit && typeof r.limit === 'object' && 'fromMaterial' in r.limit) return `<span class="note">material ${esc(r.limit.fromMaterial)}</span>`;
+    if (r.comparison === 'range') { const l = r.limit && typeof r.limit === 'object' ? r.limit : {}; return `<input data-f="min" type="text" inputmode="decimal" data-num step="any" placeholder="min" value="${esc(fmtv(l.min))}"> <input data-f="max" type="text" inputmode="decimal" data-num step="any" placeholder="max" value="${esc(fmtv(l.max))}">`; }
+    return `<input data-f="limit" type="text" inputmode="decimal" data-num step="any" placeholder="empty" value="${esc(fmtv(r.limit))}">`;
+  }
+  function renderCriteria() {
+    const root = $('critRoot'); if (!root) return;
+    const C = CR(), cat = C.catalogue();
+    if (!cat) { root.innerHTML = '<p class="note">The criteria catalogue is not loaded (js/criteria.generated.js).</p>'; return; }
+    const ac = acNow(), ev = C.evaluate(ac, critCtx()); lastEval = ev;
+    const au = ac.authority || {};
+    const sel = (name, val, opts) => `<select name="${name}">${opts.map(([v, t]) => `<option value="${esc(v)}"${v === (val || '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+    const matOpts = [['', '(none)']].concat(cat.materials.map(m => [m.id, m.name]));
+    const cls = ev.overall === 'FAIL' ? 'lvl-err' : ev.overall === 'PASS' ? 'lvl-ok' : 'lvl-warn';
+    let h = `<p class="note">${esc(C.statement())}</p>`;
+    h += `<div class="grid2"><label>Profile ${sel('profile', ac.activeProfileId, cat.profiles.map(p => [p.id, p.name]))}</label>` +
+      `<label>Authority / customer <input name="authName" type="text" value="${esc(au.name || '')}" placeholder="society, customer ..."></label>` +
+      `<label>Rule document <input name="authDoc" type="text" value="${esc(au.document || '')}"></label>` +
+      `<label>Edition <input name="authEd" type="text" value="${esc(au.edition || '')}"></label>` +
+      `<label>Inner rotor material ${sel('matInner', (ac.materials || {}).inner, matOpts)}</label>` +
+      `<label>Outer rotor material ${sel('matOuter', (ac.materials || {}).outer, matOpts)}</label></div>`;
+    const prof = cat.profiles.find(p => p.id === ac.activeProfileId);
+    h += `<p class="note">${esc(prof ? prof.description + ' ' + prof.authorityNote : '')} Template version ${esc(cat.profileSetVersion)}; ${esc(prof ? prof.source.label : '')}.</p>`;
+    h += `<p><b class="${cls}" id="critOverall" data-overall="${esc(ev.overall)}">Overall: ${esc(ev.overall)}</b> &nbsp; PASS ${ev.counts.PASS}, FAIL ${ev.counts.FAIL}, NOT EVALUATED ${ev.counts['NOT EVALUATED']}, disabled ${ev.counts.disabled}. ` +
+      `<span class="note">${lastCaseResults ? 'All calculated load cases.' : 'Active load case only (use Calculate all load cases for every case).'}</span></p>`;
+    h += `<div class="grid2"><label>User (recorded with every change) <input name="critUser" type="text" value="${esc(meta.author || '')}"></label>` +
+      `<label>Reason for the change (mandatory) <input name="critReason" type="text" placeholder="source or justification of the value"></label></div>`;
+    h += `<table class="grid-table" id="critTable"><thead><tr><th>ID</th><th>Quantity</th><th>Cmp</th><th>Limit</th><th>Unit</th><th>S</th><th>On</th><th>Source label</th><th>Value</th><th>Status</th><th></th></tr></thead><tbody>`;
+    for (const r of ev.criteria) {
+      const pass = r.status === 'PASS' ? 'ok' : r.status === 'FAIL' ? 'bad' : '';
+      const unit = r.unit && r.unit !== '-' ? r.unit : '';
+      const val = r.value === null || r.value === undefined ? '' : typeof r.value === 'boolean' ? String(r.value) : fmtv(r.value);
+      h += `<tr data-id="${esc(r.id)}" class="${pass}"><td title="${esc(r.title)}"><b>${esc(r.id)}</b>${r.overridden ? ' *' : ''}</td><td>${esc(r.quantityTitle || r.title)}</td><td>${esc(r.comparison)}</td><td>${critLimitCell(r)}</td><td>${esc(unit)}</td>` +
+        `<td>${r.comparison === 'true' ? '' : `<input data-f="sf" type="text" inputmode="decimal" data-num step="any" min="0" placeholder="1" value="${esc(fmtv(r.safetyFactor))}">`}</td>` +
+        `<td><input data-f="enabled" type="checkbox"${r.enabled ? ' checked' : ''}></td>` +
+        `<td>${r.comparison === 'true' ? esc((r.source || {}).label || '') : `<input data-f="source" type="text" value="${esc((r.source || {}).label || '')}">`}</td>` +
+        `<td class="n">${esc(val)}${r.governingCase && r.governingCase !== 'n/a' ? `<br><small>${esc(r.governingCase)}</small>` : ''}</td><td>${esc(r.status)}${r.reason ? `<br><small>${esc(r.reason)}</small>` : ''}</td>` +
+        `<td><button type="button" data-set="${esc(r.id)}">Set</button></td></tr>`;
+    }
+    h += `</tbody></table>`;
+    h += `<div class="btn-row">Add criterion: <input name="custId" type="text" placeholder="id, e.g. C-MINE-1" size="14"> <select name="custQ">${cat.quantities.filter(q => q.kind !== 'predicate').map(q => `<option value="${esc(q.key)}">${esc(q.title)} [${esc(q.unit)}]</option>`).join('')}</select> ` +
+      `<select name="custCmp"><option>&lt;=</option><option>&gt;=</option><option>range</option></select> <button type="button" id="custAdd">Add</button></div>`;
+    h += `<h3>Material allowables</h3><p class="note">No allowable is shipped. Enter values from the datasheet or standard you apply; the Hertz criterion uses the lower sigma_Hlim of the selected rotor materials divided by S (gear analogy, assumption A-AC1).</p>`;
+    h += `<table class="grid-table" id="matTable"><thead><tr><th>Material</th><th>sigma_Hlim ${esc(cat.materials[0].unit)}</th><th>Yield ${esc(cat.materials[0].unit)}</th><th>Condition</th><th>Source</th><th></th></tr></thead><tbody>`;
+    const eff = C.effective(ac);
+    for (const m of cat.materials) {
+      const row = eff.materialLibrary[m.id];
+      h += `<tr data-mid="${esc(m.id)}"><td title="${esc(m.basis)}">${esc(m.name)}${row.overrides && row.overrides.length ? ' *' : ''}</td>` +
+        `<td><input data-f="sigmaHlim" type="text" inputmode="decimal" data-num step="any" value="${esc(fmtv(row.sigmaHlim))}"></td><td><input data-f="yield" type="text" inputmode="decimal" data-num step="any" value="${esc(fmtv(row.yield))}"></td>` +
+        `<td><input data-f="condition" type="text" value="${esc(row.condition || '')}"></td><td><input data-f="source" type="text" value="${esc((row.source || {}).label || '')}" title="${esc((row.source || {}).doc || '')}"></td>` +
+        `<td><button type="button" data-setm="${esc(m.id)}">Set</button></td></tr>`;
+    }
+    h += `</tbody></table>`;
+    h += `<h3>Overrides</h3>`;
+    h += ev.overrides.length ? `<table class="grid-table" id="ovTable"><thead><tr><th>Target</th><th>ID</th><th>Field</th><th>Old</th><th>New</th><th>Unit</th><th>Reason</th><th>User</th><th>Time</th></tr></thead><tbody>` +
+      ev.overrides.map(o => { const j = v => esc(v !== null && typeof v === 'object' ? JSON.stringify(v) : v); return `<tr><td>${esc(o.target)}</td><td>${esc(o.id)}</td><td>${esc(o.field)}</td><td>${j(o.oldValue)}</td><td>${j(o.newValue)}</td><td>${esc(o.unit)}</td><td>${esc(o.reason)}</td><td>${esc(o.user)}</td><td>${esc(o.timestamp)}</td></tr>`; }).join('') + `</tbody></table>`
+      : '<p class="note">No override entered. Every limit-based criterion is NOT EVALUATED.</p>';
+    if (ev.issues.length) h += `<p class="lvl-err">Issues: ${esc(ev.issues.join('; '))}</p>`;
+    h += `<p class="note">Criteria-set hash: <span class="mono" id="critHash">${esc(ev.criteriaHash)}</span></p>`;
+    root.innerHTML = h;
+  }
+
+  function critField(tr, f) { const e = tr.querySelector(`[data-f="${f}"]`); return e; }
+  const parseNum = e => { if (!e || e.value.trim() === '') return null; const v = G.num.parse(e.value); return Number.isFinite(v) ? v : NaN; };
+  function critContext() {
+    const root = $('critRoot');
+    return { user: root.querySelector('[name="critUser"]').value, reason: root.querySelector('[name="critReason"]').value };
+  }
+  function critSetRow(id) {
+    const C = CR(), ac = acNow(), eff = C.effective(ac), row = eff.criteria.find(c => c.id === id); if (!row) return;
+    const tr = $('critRoot').querySelector(`tr[data-id="${id}"]`), cx = critContext(), recs = [];
+    const add = (field, value, unit) => recs.push({ target: 'criterion', id, field, value, unit, reason: cx.reason, user: cx.user });
+    const same = (a, b) => G.project.canonical(a === undefined ? null : a) === G.project.canonical(b === undefined ? null : b);
+    if (row.comparison !== 'true') {
+      if (row.comparison === 'range') {
+        const lo = parseNum(critField(tr, 'min')), hi = parseNum(critField(tr, 'max'));
+        if (Number.isNaN(lo) || Number.isNaN(hi) || (lo === null) !== (hi === null)) { say('Enter both range values (min and max) or leave both empty.', 'warn'); return; }
+        const nv = lo === null ? null : { min: lo, max: hi };
+        if (!same(nv, row.limit)) add('limit', nv, row.unit);
+      } else if (!(row.limit && typeof row.limit === 'object')) {
+        const v = parseNum(critField(tr, 'limit'));
+        if (Number.isNaN(v)) { say('The limit must be a number.', 'warn'); return; }
+        if (!same(v, row.limit)) add('limit', v, row.unit);
+      }
+      const sf = parseNum(critField(tr, 'sf'));
+      if (Number.isNaN(sf) || (sf !== null && sf <= 0)) { say('The safety factor must be a number greater than zero.', 'warn'); return; }
+      if (!same(sf, row.safetyFactor)) add('safetyFactor', sf, '-');
+      const lab = critField(tr, 'source').value;
+      if (lab !== ((row.source || {}).label || '')) add('source', { label: lab, doc: null, clause: null, verified: false }, null);
+    }
+    const en = critField(tr, 'enabled').checked;
+    if (en !== (row.enabled !== false)) add('enabled', en, null);
+    if (!recs.length) { say(`${id}: nothing changed.`); return; }
+    try {
+      const now = new Date().toISOString();
+      let next = ac;
+      for (const r of recs) next = C.addOverride(next, r, now);
+      setAC(next, 'acset'); say(`${id}: ${recs.length} override${recs.length > 1 ? 's' : ''} recorded (${recs.map(r => r.field).join(', ')}).`);
+    } catch (e) { say(e.message, 'warn'); }
+  }
+  function critSetMaterial(mid) {
+    const C = CR(), ac = acNow(), row = C.effective(ac).materialLibrary[mid], tr = $('critRoot').querySelector(`tr[data-mid="${mid}"]`), cx = critContext(), recs = [];
+    const add = (field, value, unit) => recs.push({ target: 'material', id: mid, field, value, unit, reason: cx.reason, user: cx.user });
+    for (const f of ['sigmaHlim', 'yield']) {
+      const v = parseNum(critField(tr, f));
+      if (Number.isNaN(v)) { say(`${f} must be a number.`, 'warn'); return; }
+      if (v !== (row[f] === undefined ? null : row[f])) add(f, v, row.unit);
+    }
+    const cond = critField(tr, 'condition').value; if (cond !== (row.condition || '')) add('condition', cond, null);
+    const lab = critField(tr, 'source').value; if (lab !== ((row.source || {}).label || '')) add('source', Object.assign({}, row.source, { label: lab, verified: false }), null);
+    if (!recs.length) { say(`${mid}: nothing changed.`); return; }
+    try {
+      const now = new Date().toISOString(); let next = ac;
+      for (const r of recs) next = C.addOverride(next, r, now);
+      setAC(next, 'acmat'); say(`${mid}: ${recs.length} material override${recs.length > 1 ? 's' : ''} recorded.`);
+    } catch (e) { say(e.message, 'warn'); }
+  }
+  $('critRoot').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    if (b.dataset.set) critSetRow(b.dataset.set);
+    else if (b.dataset.setm) critSetMaterial(b.dataset.setm);
+    else if (b.id === 'custAdd') {
+      const root = $('critRoot'), id = root.querySelector('[name="custId"]').value.trim(), q = root.querySelector('[name="custQ"]').value, cmp = root.querySelector('[name="custCmp"]').value;
+      const ac = Object.assign(CR().defaultAC(), JSON.parse(JSON.stringify(acNow())));
+      if (!id) { say('Enter an id for the new criterion.', 'warn'); return; }
+      if (CR().effective(ac).criteria.some(c => c.id === id)) { say(`Criterion ${id} already exists.`, 'warn'); return; }
+      ac.customCriteria = (ac.customCriteria || []).concat([{ id, quantity: q, comparison: cmp, title: id }]);
+      setAC(ac, 'accust'); say(`Criterion ${id} added (no limit: NOT EVALUATED until you enter one).`);
+    }
+  });
+  $('critRoot').addEventListener('change', ev => {
+    const n = ev.target.name; if (!n) return;
+    const ac = Object.assign(CR().defaultAC(), JSON.parse(JSON.stringify(acNow())));
+    if (n === 'profile') ac.activeProfileId = ev.target.value;
+    else if (n === 'authName') ac.authority = Object.assign({}, ac.authority, { name: ev.target.value || null });
+    else if (n === 'authDoc') ac.authority = Object.assign({}, ac.authority, { document: ev.target.value || null });
+    else if (n === 'authEd') ac.authority = Object.assign({}, ac.authority, { edition: ev.target.value || null });
+    else if (n === 'matInner') ac.materials = Object.assign({}, ac.materials, { inner: ev.target.value || null });
+    else if (n === 'matOuter') ac.materials = Object.assign({}, ac.materials, { outer: ev.target.value || null });
+    else return;
+    setAC(ac, 'acsel');
+  });
+  // Checks/messages that name a criterion link to its row.
+  function gotoCriterion(id) {
+    showTab('criteria'); renderCriteria();
+    const tr = $('critRoot').querySelector(`tr[data-id="${id}"]`);
+    if (tr) { tr.scrollIntoView({ block: 'center' }); tr.classList.add('sel'); }
+  }
+  $('checks').addEventListener('click', ev => { const li = ev.target.closest('[data-criterion]'); if (li) gotoCriterion(li.dataset.criterion); });
+
+  // ------------------------------------------------------------------ splitter between the forms and the dock
+  (function () {
+    const work = $('work'), sp = $('splitter'), KEY = 'gerotor.formWidth';
+    const set = px => { work.style.setProperty('--form-w', px + 'px'); work.style.setProperty('--form-w-user', px + 'px'); };
+    const clamp = px => Math.max(260, Math.min(px, work.clientWidth * 0.7));
+    try { const v = +LS.getItem(KEY); if (v >= 260) set(v); } catch (_) { /* default */ }
+    sp.addEventListener('pointerdown', ev => {
+      ev.preventDefault(); sp.setPointerCapture(ev.pointerId); sp.classList.add('drag');
+      const x0 = ev.clientX, w0 = $('centre').getBoundingClientRect().width;
+      const move = e => set(Math.round(clamp(w0 + e.clientX - x0)));
+      const up = () => { sp.classList.remove('drag'); sp.removeEventListener('pointermove', move); sp.removeEventListener('pointerup', up); try { LS.setItem(KEY, String(Math.round($('centre').getBoundingClientRect().width))); } catch (_) { /* quota */ } A.redraw(); };
+      sp.addEventListener('pointermove', move); sp.addEventListener('pointerup', up);
+    });
+    sp.addEventListener('dblclick', () => { work.style.removeProperty('--form-w'); work.style.removeProperty('--form-w-user'); try { LS.removeItem(KEY); } catch (_) { /* ignore */ } A.redraw(); });
+  })();
+
   // ------------------------------------------------------------------ init
   injectTabCss();
   renderBars(); addTips(); renderTabs();
@@ -563,7 +774,7 @@
   updateChrome();
   new ResizeObserver(() => A.redraw()).observe($('rightDock'));
   // Stamp git hash/version from the backend (offline: stays "not stamped" and reports are INVALID).
-  P.connectBackend().then(r => { if (r) say(`Backend connected: ${P.VERSION.core}, git ${P.VERSION.gitHash}.`); else say('No backend: code version not stamped, reports will be marked INVALID.', 'warn'); }).catch(() => {});
+  P.connectBackend().then(r => { if (r) { say(`Backend connected: ${P.VERSION.core}, git ${P.VERSION.gitHash}.`); P.fetchResolved(state()).then(setResolvedStatus); } else say('No backend: code version not stamped, reports will be marked INVALID.', 'warn'); }).catch(() => {});
 
   G.workspace = { showTab, showDock, showBottom, run, CMD, state, applyProject, openText, snapshot, hist, say, get dirty() { return isDirty(); }, calcCases, validate, buildReport, markSaved() { savedStr = snapStr(); updateChrome(); } };
 })(window.Gerotor);

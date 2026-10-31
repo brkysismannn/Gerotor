@@ -1,5 +1,5 @@
 {
-  "schema": "gerotor-project/3",
+  "schema": "gerotor-project/4",
   "metadata": {
     "projectName": "Example N7 pump",
     "partNo": "GP-0007",
@@ -9,7 +9,7 @@
     "created": "2026-10-30T09:00:00Z",
     "modified": "2026-10-30T09:00:00Z",
     "checked": null,
-    "notes": "Reference design n7_ports_leak of the JS parity suite.",
+    "notes": "Reference design n7_ports_leak of the JS parity suite. All values are EXAMPLE INPUTS (not recommendations): fluid, clearances, friction and rotor material (210 GPa / 0.3) are the JS test-suite values without a literature source.",
     "scope": "Steady-state hydraulic, kinematic and contact analysis of the N7 reference gerotor at the listed operating points; transient start-up, thermal and fatigue analysis are excluded.",
     "revisions": [
       {
@@ -62,7 +62,12 @@
     "simSub": 4,
     "dblIn": false,
     "dblOut": false,
-    "shadow": true
+    "shadow": true,
+    "Ein": 210,
+    "nuIn": 0.3,
+    "Eout": 210,
+    "nuOut": 0.3,
+    "shaftVent": true
   },
   "operatingPoints": [
     {
@@ -93,9 +98,19 @@
       "lambdaConvention": "ivanovic"
     },
     "acceptanceCriteria": {
-      "authority": null,
-      "status": "pending",
-      "criteria": []
+      "schemaVersion": 1,
+      "activeProfileId": "generic",
+      "authority": {
+        "name": null,
+        "document": null,
+        "edition": null
+      },
+      "materials": {
+        "inner": null,
+        "outer": null
+      },
+      "overrides": [],
+      "customCriteria": []
     }
   },
   "results": null,

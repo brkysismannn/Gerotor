@@ -11,7 +11,7 @@ import numpy as np
 
 from .contact import compute_contact
 from .friction import compute_mechanical
-from .leakage import outlet_ripple, simulate_network
+from .leakage import NET_SUB_DEFAULT, outlet_ripple, simulate_network
 
 from .errors import require_analysis
 
@@ -22,7 +22,7 @@ def _linspace(a, b, n):
 
 def operating_point(p0, res, rpm, dp) -> dict:
     require_analysis(res, "operating_point", ("cc", "ripple"))
-    p = dict(p0, rpm=rpm, dp=dp, simSub=p0.get("simSub") or 6)
+    p = dict(p0, rpm=rpm, dp=dp, simSub=p0.get("simSub") or NET_SUB_DEFAULT)
     qTheo = res["cc"] * 1e-6 * rpm / 60
     r = dict(res, ports=None, contact=None)
     etaV, ripple, pMax, voidMax, pRipple = 1.0, res["ripple"], p["pIn"] + dp, 0.0, math.nan
@@ -60,7 +60,7 @@ def performance_map(p, res, rpm_min, rpm_max, n_rpm, dp_min, dp_max, n_dp) -> di
 
 
 def void_at(p0, res, rpm, dp) -> float:
-    p = dict(p0, rpm=rpm, dp=dp, simSub=p0.get("simSub") or 6)
+    p = dict(p0, rpm=rpm, dp=dp, simSub=p0.get("simSub") or NET_SUB_DEFAULT)
     sim = simulate_network(p, res, res["ports"]["As"], res["ports"]["Ad"], res["ports"])
     return max(0.0, float(sim["VF"].max()))
 

@@ -3,7 +3,8 @@ import math
 
 import pytest
 
-from gerotor_core import (InvalidDesignError, c_to_peak_gap, design, diametral_to_radial, friction,
+from examples import design
+from gerotor_core import (InvalidDesignError, c_to_peak_gap, diametral_to_radial, friction,
                           geometry as g, lambda_from_gamez, lambda_gamez, peak_gap_to_c, perfmap,
                           radial_to_diametral, spectrum)
 from gerotor_core import backlash

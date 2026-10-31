@@ -9,11 +9,13 @@ from gerotor_core import geometry, ports, perfmap, spectrum
 _ROOT = pathlib.Path(__file__).resolve().parents[3]
 JS = next((d for d in (_ROOT / "frontend" / "js", _ROOT / "js") if d.is_dir()), _ROOT / "frontend" / "js")
 FILES = ["geometry.js", "backlash.js", "leakage.js", "contact.js", "friction.js", "fluid.js",
-         "ports.js", "spectrum.js", "reverse.js", "perfmap.js"]
+         "ports.js", "spectrum.js", "reverse.js", "perfmap.js",
+         "criteria.generated.js", "criteria.js"]  # criteria: JS check rows are neutralised (NOT EVALUATED)
 BASE = dict(c=0, RvAuto=True, RvClear=0.1, bore=0, rpm=1000, dp=10, portsOn=False, portRoAuto=True, portRiAuto=True,
             sucStart=0, sucEnd=0, delStart=0, delEnd=0, gSucStart=0, gSucEnd=0, gDelStart=0, gDelEnd=0, grooveW=1,
             doubleFill=False, pIn=1, pVap=0.2, rho=860, bulk=1400, Cd=0.7, nu=30, leakOn=False, axialClr=0.05,
-            shaftVent=True, odClr=0.15, jbLen=0, jbClr=0.04, faceSupport="balanced", faceMu=0.08)
+            shaftVent=True, odClr=0.15, jbLen=0, jbClr=0.04, faceSupport="balanced", faceMu=0.08,
+            Ein=210, nuIn=0.3, Eout=210, nuOut=0.3)  # EXAMPLE inputs (= JS contact.js fallback); backend has no default
 D = {
  "minN3": (dict(N=3, e=2, R=9, rp=3, b=10, OD=40, rpm=1000, dp=10), 24),
  "N4_ports": (dict(N=4, e=2, R=12, rp=3.5, b=12, OD=45, bore=8, c=0.02, portsOn=True, leakOn=True, simSub=3), 24),
@@ -113,6 +115,33 @@ def cmp(py, ref, path, errs, scale, cnt):
         errs.append(f"{path}: py {py!r} JS {ref!r} (rel-to-scale {abs(py - ref) / max(sc, 1e-300):.2e})")
 
 
+NE = " - NOT EVALUATED"
+
+
+def _pop_checks(x, out, path="res"):
+    """Remove every 'checks' list from the JS tree (compared separately by check_rows)."""
+    if isinstance(x, dict):
+        if isinstance(x.get("checks"), list):
+            out[path] = x.pop("checks")
+        for k, v in x.items():
+            _pop_checks(v, out, f"{path}.{k}")
+
+
+def check_rows(py_checks, js_checks, path, errs):
+    """JS criteria.js emits unsourced verdicts as '<title> - NOT EVALUATED' info rows: compare the
+    remaining verdicts exactly and require every core verdict neutralised by the API to be among the
+    JS NOT EVALUATED criterion ids (api.criteria.NEUTRALIZED_CHECKS)."""
+    from api.criteria import NEUTRALIZED_CHECKS, neutralize_checks
+    py = neutralize_checks(py_checks)
+    a = [(c["level"], c["title"]) for c in py if not c["title"].endswith(NE)]
+    b = [(c["level"], c["title"]) for c in js_checks if not c["title"].endswith(NE)]
+    if a != b:
+        errs.append(f"{path}: verdicts py {a} JS {b}")
+    js_ids = {NEUTRALIZED_CHECKS.get(c["title"][: -len(NE)]) for c in js_checks if c["title"].endswith(NE)}
+    if not {c["criterion"] for c in py if c["title"].endswith(NE)} <= js_ids:
+        errs.append(f"{path}: neutralised criteria not in JS NOT EVALUATED rows")
+
+
 @pytest.mark.parametrize("name", list(D))
 def test_design(name, ctx):
     ov, samples = D[name]
@@ -123,7 +152,14 @@ def test_design(name, ctx):
     L = geometry.lobe_limits(p)
     errs, cnt = [], [0]
     cmp(p, ref["params"], "params", errs, None, cnt)
+    js_checks = {}
+    _pop_checks(ref["res"], js_checks)
     cmp(r, ref["res"], "res", errs, None, cnt)
+    for path, rows in js_checks.items():
+        node = r
+        for k in path.split(".")[1:]:
+            node = node[k]
+        check_rows(node["checks"], rows, path, errs)
     cmp(L, ref["lobe"], "lobe", errs, None, cnt)
     cmp(geometry.inner_tool_diameter(p), ref["tool"], "tool", errs, None, cnt)
     for t, c in zip([0.05, 0.37, 0.81], ref["cham"]):

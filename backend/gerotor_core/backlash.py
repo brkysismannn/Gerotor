@@ -4,6 +4,11 @@ The inner profile is the trochoid offset by rp + c, so with c > 0 the rotors are
 conjugate. The inner rotor drives; the outer rotor lags its conjugate position by delta(t)
 until the first lobe touches (Ivanovic et al. 2012; Rundo 2017 sec. 4.1.3).
 
+delta is the OUTER-ROTOR LAG, an angle of the outer rotor (MD decision 2026-10-31). Ivanovic 2012
+quotes the lag of the inner gear: delta_inner = delta N/(N-1) (from a1 = N t/(N-1); fixed axes,
+u = N/(N-1)); validated against Ivanovic Figs. 9a/10a in tests/test_literature_validation.py.
+Outputs deltaMax / deltaMin [rad, outer-rotor lag]; speedPulsation = max |d delta/dt| [-].
+
 Gap at lobe k:  h_k = c + d_k, d_k = signed normal distance (outward +) from the lobe centre
 to the trochoid, both in the inner-rotor frame. delta(t) solves min_k h_k(delta) = 0
 (bisection). By symmetry h_k(t) = h_0(t + 2 pi k / N) and delta is 2 pi / N periodic.
@@ -19,6 +24,13 @@ from .geometry import TAU, js_round, trochoid, trochoid_d1, trochoid_d2
 
 from .errors import require_analysis
 
+# Numerical settings (values = JS tool; convergence evidence: docs/convergence.md).
+NEWTON_ITERS = 8        # N10 foot-point Newton iterations
+NEWTON_TOL = 1e-13      # N10 Newton step tolerance [rad]
+DELTA_DOUBLINGS = 40    # N10 bracket doublings for the backlash angle
+DELTA_BISECT = 60       # N10 bisections for the backlash angle
+CONTACT_GAP_FRAC = 0.01 # C11 'in contact' = gap < 1 % of c (display count nContact)
+
 
 def signed_distance(p, Y, phi0: float) -> float:
     """Signed distance (outward +) from point Y (inner frame) to the trochoid.
@@ -26,14 +38,14 @@ def signed_distance(p, Y, phi0: float) -> float:
     Foot point by Newton on g(phi) = (Q - Y) . Q' = 0 starting at phi0 (max 8 iterations).
     """
     phi = phi0
-    for _ in range(8):
+    for _ in range(NEWTON_ITERS):
         q, d1, d2 = trochoid(p, phi), trochoid_d1(p, phi), trochoid_d2(p, phi)
         rx, ry = q[0] - Y[0], q[1] - Y[1]
         g = rx * d1[0] + ry * d1[1]
         gp = d1[0] * d1[0] + d1[1] * d1[1] + rx * d2[0] + ry * d2[1]
         step = g / gp
         phi -= step
-        if abs(step) < 1e-13:
+        if abs(step) < NEWTON_TOL:
             break
     q, d1 = trochoid(p, phi), trochoid_d1(p, phi)
     L = math.hypot(d1[0], d1[1])
@@ -65,11 +77,11 @@ def solve_delta(p, t: float, buf=None) -> float:
         return float(buf.min())
 
     lo, hi = 0.0, p["c"] / p["R"]
-    for _ in range(40):
+    for _ in range(DELTA_DOUBLINGS):
         if not (min_gap(hi) > 0):
             break
         hi *= 2
-    for _ in range(60):
+    for _ in range(DELTA_BISECT):
         mid = 0.5 * (lo + hi)
         if min_gap(mid) > 0:
             lo = mid
@@ -81,7 +93,7 @@ def solve_delta(p, t: float, buf=None) -> float:
 def compute_backlash(p, res) -> dict:
     """Backlash over the analysis grid t_j = j dt.
 
-    delta[j] backlash angle [rad]; gap0[j] gap at lobe 0; gapLead[j] gap at the leading
+    delta[j] outer-rotor lag [rad of outer rotor]; gap0[j] gap at lobe 0; gapLead[j] gap at the leading
     contact of chamber 0 (lobe 1) = gap0[j + M/N]; nContact[j] lobes with gap < 1 % of c.
     speedPulsation = max |d delta / dt| (outer speed omega2_actual/omega2 = 1 - d delta/dt).
     """
@@ -96,7 +108,7 @@ def compute_backlash(p, res) -> dict:
     for j in range(M):
         gaps_at(p, j * dt, delta[j], buf)
         gap0[j] = buf[0]
-        nContact[j] = int(np.sum(buf < 0.01 * p["c"]))
+        nContact[j] = int(np.sum(buf < CONTACT_GAP_FRAC * p["c"]))
     gapLead = np.roll(gap0, -step)
     rate = np.abs(np.roll(delta, -1) - np.roll(delta, 1)) / (2 * dt)
     jTip = js_round(math.pi / dt) % M

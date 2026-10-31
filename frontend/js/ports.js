@@ -355,7 +355,7 @@
 
   function analysePorts(p, res, L) {
     const checks = [];
-    const push = (level, title, detail) => checks.push({ level, title, detail });
+    const push = (level, title, detail, criterion) => checks.push(criterion ? { level, title, detail, criterion } : { level, title, detail });
     const f = (x, d = 2) => Number.isFinite(x) ? x.toFixed(d) : '—';
     const out = { checks };
 
@@ -401,7 +401,7 @@
     out.As = As; out.Ad = Ad;
 
     // Cross-porting and trapped volume.
-    const tol = 1e-4 * res.Amax;
+    const tol = 0;           // open = clipped area > 0 (mirrors gerotor_core ports.OPEN_TOL_REL = 0.0)
     let cross = 0, trappedSwing = 0, inTrap = false, trapStart = 0;
     for (let j = 0; j < M; j++) {
       if (As[j] > tol && Ad[j] > tol) cross++;
@@ -414,13 +414,13 @@
     if (cross > 0) push('err', 'Cross-porting', `A chamber connects both ports over ${f(out.crossDeg, 1)}° of rotation (direct leakage path).`);
     else push('ok', 'No cross-porting', 'Lands separate suction and delivery at all positions.');
     const swingPct = 100 * trappedSwing / (res.Amax - res.Amin);
-    if (swingPct > 2) push('warn', 'Trapped volume change', `Volume changes by ${f(swingPct, 1)} % of the stroke while sealed from both ports.`);
+    out.trappedVolumeSwing = swingPct / 100;          // fraction of the stroke (value kept; the former 2 % verdict is removed)
+    push('info', 'Trapped volume change - NOT EVALUATED', `Volume changes by ${f(swingPct, 1)} % of the stroke while sealed from both ports; the former 2 % threshold had no documented source (criterion C-TRAPPED).`, 'C-TRAPPED');
 
-    // Inlet velocity (Nichols / Gamez-Montero: below 2 m/s).
+    // Inlet velocity Q_theo / (A_suction fill). The former 2 m/s verdict is removed (no source): criterion C-PORT-V-IN.
     const fill = p.fillS || (p.doubleFill ? 2 : 1);
     out.inletVelocity = res.flowLpm * 1000 / (60 * out.suction.area * fill);
-    if (out.inletVelocity > 2) push('warn', 'High inlet port velocity', `${f(out.inletVelocity)} m/s > 2 m/s; enlarge the port or use a double-sided inlet.`);
-    else push('ok', 'Inlet port velocity', `${f(out.inletVelocity)} m/s (limit 2 m/s).`);
+    push('info', 'Inlet port velocity - NOT EVALUATED', `${f(out.inletVelocity)} m/s; no limit entered in criterion C-PORT-V-IN.`, 'C-PORT-V-IN');
 
     // Pressure model.
     if (p.rpm > 0) {
@@ -449,15 +449,12 @@
         outlet: p.dp > 0 ? G.outletRipple(p, res, sim) : null,
       });
       if (p.leakOn) {
-        const lossPct = 100 * (1 - qMean / qTheo);
-        push(lossPct > 10 ? 'warn' : 'ok', 'Volumetric efficiency', `${f(100 * qMean / qTheo, 1)} % (tip gaps, axial faces, port lands, timing).`);
+        push('info', 'Volumetric efficiency - NOT EVALUATED', `${f(100 * qMean / qTheo, 1)} % (tip gaps, axial faces, port lands, timing); the former 10 % loss threshold had no documented source (criterion C-ETA-V).`, 'C-ETA-V');
       }
       const over = (pMax - sim.pD) / Math.max(sim.pD - sim.pS, 1e4);
-      if (over > 0.2) push('warn', 'Pressure overshoot', `Peak chamber pressure ${f(pMax / 1e5, 1)} bar abs, ${f(100 * over, 0)} % of Δp above delivery.`);
-      else push('ok', 'Pressure peaks', `Peak chamber pressure ${f(pMax / 1e5, 1)} bar abs.`);
-      if (vfMax > 0.005) push('warn', 'Cavitation / incomplete filling', `Max void ${f(100 * vfMax, 1)} % of chamber volume; delay the suction port end or add a metering groove.`);
-      else if (pMin <= sim.pV * 1.0001) push('info', 'Brief cavitation at port edges', `Pressure touches the cavitation limit near the port edges (max void ${f(100 * vfMax, 2)} %).`);
-      else push('ok', 'No cavitation', `Min chamber pressure ${f(pMin / 1e5, 2)} bar abs.`);
+      out.pressureOvershoot = over;
+      push('info', 'Pressure overshoot - NOT EVALUATED', `Peak chamber pressure ${f(pMax / 1e5, 1)} bar abs, ${f(100 * over, 0)} % of Δp above delivery; the former 0.2 threshold had no documented source (criterion C-P-OVERSHOOT).`, 'C-P-OVERSHOOT');
+      push('info', 'Cavitation / incomplete filling - NOT EVALUATED', `Max void ${f(100 * vfMax, 2)} % of chamber volume, min chamber pressure ${f(pMin / 1e5, 2)} bar abs${pMin <= sim.pV * 1.0001 ? ' (touches the cavitation limit)' : ''}; the former 0.005 void threshold had no documented source (criterion C-CAV-VOID).`, 'C-CAV-VOID');
     }
     return out;
   }
