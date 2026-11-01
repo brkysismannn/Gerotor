@@ -201,6 +201,8 @@
               </select></label>
             <label>Oil temperature <span class="unit">°C</span>
               <input name="oilT" type="text" inputmode="decimal" data-num step="5" value="40"></label>
+            <label title="Linear thermal expansion coefficient of the oil, from its datasheet. Empty: the density is not temperature-corrected.">Thermal expansion <span class="unit">1/K</span>
+              <input name="rhoExp" type="text" inputmode="decimal" data-num step="0.0001" value="" placeholder="datasheet"></label>
             <label>Inlet pressure <span class="unit">bar abs</span>
               <input name="pIn" type="text" inputmode="decimal" data-num min="0" step="0.1" value="1"></label>
             <label>Cavitation pressure <span class="unit">bar abs</span>
@@ -308,6 +310,19 @@
           <button type="button" id="caseDel">Delete</button>
           <button type="button" id="caseRun" class="primary">Calculate all</button>
         </div>
+        <form id="tolForm" class="params" autocomplete="off">
+          <p class="note">Optional clearance tolerance bands (same unit and convention as the design inputs). With a band, "Calculate all" also gives η vol, η hm and η as intervals (docs/tolerance.md). Empty = no interval.</p>
+          <div class="grid2">
+            <label>Profile clearance c min <span class="unit">mm</span><input name="c_min" type="text" inputmode="decimal" data-num step="any" value=""></label>
+            <label>Profile clearance c max <span class="unit">mm</span><input name="c_max" type="text" inputmode="decimal" data-num step="any" value=""></label>
+            <label>Axial clearance min <span class="unit">mm</span><input name="axialClr_min" type="text" inputmode="decimal" data-num step="any" value=""></label>
+            <label>Axial clearance max <span class="unit">mm</span><input name="axialClr_max" type="text" inputmode="decimal" data-num step="any" value=""></label>
+            <label>OD clearance (diametral) min <span class="unit">mm</span><input name="odClr_min" type="text" inputmode="decimal" data-num step="any" value=""></label>
+            <label>OD clearance (diametral) max <span class="unit">mm</span><input name="odClr_max" type="text" inputmode="decimal" data-num step="any" value=""></label>
+            <label>Journal clearance (diametral) min <span class="unit">mm</span><input name="jbClr_min" type="text" inputmode="decimal" data-num step="any" value=""></label>
+            <label>Journal clearance (diametral) max <span class="unit">mm</span><input name="jbClr_max" type="text" inputmode="decimal" data-num step="any" value=""></label>
+          </div>
+        </form>
       </section>
       <section data-steps="map" class="result-wide">
         <h2>Charts <small>pump performance range</small></h2>
@@ -487,6 +502,7 @@
   <script src="js/contact.js"></script>
   <script src="js/friction.js"></script>
   <script src="js/perfmap.js"></script>
+  <script src="js/tolerance.js"></script>
   <script src="js/reverse.js"></script>
   <script src="js/fluid.js"></script>
   <script src="js/spectrum.js"></script>

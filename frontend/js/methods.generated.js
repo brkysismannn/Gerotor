@@ -2,278 +2,77 @@
 (function (G) { G.methodsData = {
  "assumptions": [
   {
-   "active": "p_in - p_vap (inlet pressure of the case)",
    "default": "inlet",
    "id": "A-D2",
-   "literatureVariant": false,
    "name": "CAV_HEAD_INLET",
-   "sources": [
-    {
-     "kind": "literature",
-     "ref": "GDS 2017, Calculation of Cavitation Limits",
-     "use": "'atm' variant, tip-speed and gallery limits"
-    },
-    {
-     "kind": "derivation",
-     "ref": "Bernoulli at the inlet with the actual inlet pressure (in-house)",
-     "use": "'inlet' default"
-    }
-   ],
-   "statement": "Available cavitation head p_in - p_vap; 'atm' = GDS p_atm - p_vap.",
    "switch": "cavHead",
-   "text": "Available cavitation head p_in - p_vap; 'atm' = GDS p_atm - p_vap.",
-   "usedBy": [
-    "cavitation"
-   ],
-   "value": "inlet",
-   "variants": [
-    {
-     "meaning": "p_in - p_vap (inlet pressure of the case)",
-     "value": "inlet"
-    },
-    {
-     "meaning": "GDS: p_atm - p_vap",
-     "value": "atm"
-    }
-   ]
+   "text": "Available cavitation head p_in - p_vap; 'atm' = GDS p_atm - p_vap."
   },
   {
-   "active": "design.c = eps",
    "default": "equidistance",
    "id": "A-D3",
-   "literatureVariant": false,
    "name": "C_EQUIDISTANCE",
-   "sources": [
-    {
-     "kind": "literature",
-     "ref": "Ivanovic et al. 2012",
-     "use": "equidistance eps Eq.(9), R = lam z e, rp = c e"
-    }
-   ],
-   "statement": "c is the profile equidistance (Ivanovic eps); peak tip gap ~ 2c.",
    "switch": "clearanceInput",
-   "text": "c is the profile equidistance (Ivanovic eps); peak tip gap ~ 2c.",
-   "usedBy": [
-    "geometry",
-    "backlash",
-    "reverse"
-   ],
-   "value": "equidistance",
-   "variants": [
-    {
-     "meaning": "design.c = eps",
-     "value": "equidistance"
-    },
-    {
-     "meaning": "design.c = peak tip gap, converted to eps",
-     "value": "peakGap"
-    }
-   ]
+   "text": "c is the profile equidistance (Ivanovic eps); peak tip gap ~ 2c."
   },
   {
-   "active": "suction area x fillS (fillS = 2 if dblIn)",
    "default": true,
    "id": "A-D4",
-   "literatureVariant": false,
    "name": "CAV_AREA_DOUBLE_FILL",
-   "sources": [
-    {
-     "kind": "literature",
-     "ref": "GDS 2017, Calculation of Cavitation Limits",
-     "use": "inlet gallery Re = 2000 limit, single port area"
-    }
-   ],
-   "statement": "Gallery area = suction-port area x fillS; false = GDS single port.",
    "switch": "cavAreaDoubleFill",
-   "text": "Gallery area = suction-port area x fillS; false = GDS single port.",
-   "usedBy": [
-    "cavitation"
-   ],
-   "value": true,
-   "variants": [
-    {
-     "meaning": "suction area x fillS (fillS = 2 if dblIn)",
-     "value": true
-    },
-    {
-     "meaning": "GDS single-port area",
-     "value": false
-    }
-   ]
+   "text": "Gallery area = suction-port area x fillS; false = GDS single port."
   },
   {
-   "active": "inputs diametral",
    "default": "diametral",
    "id": "A-D5",
-   "literatureVariant": false,
    "name": "OD_CLEARANCE_DIAMETRAL",
-   "sources": [
-    {
-     "kind": "literature",
-     "ref": "Totaro, Zardin & Borghi 2025, Evaluation of a simple method to estimate the shaft torque in a gerotor pump",
-     "use": "outer-rotor radial and journal viscous torque model"
-    },
-    {
-     "kind": "derivation",
-     "ref": "Ocvirk short-bearing solution (textbook)",
-     "use": "radial clearance = diametral/2"
-    }
-   ],
-   "statement": "odClr, jbClr diametral; Ocvirk uses radial = half.",
    "switch": "clearanceConvention",
-   "text": "odClr, jbClr diametral; Ocvirk uses radial = half.",
-   "usedBy": [
-    "friction",
-    "operating"
-   ],
-   "value": "diametral",
-   "variants": [
-    {
-     "meaning": "inputs diametral",
-     "value": "diametral"
-    },
-    {
-     "meaning": "inputs radial, doubled internally",
-     "value": "radial"
-    }
-   ]
+   "text": "odClr, jbClr diametral; Ocvirk uses radial = half."
   },
   {
-   "active": "symmetric W/2 per bearing",
    "default": null,
    "id": "A-D6",
-   "literatureVariant": false,
    "name": "JOURNAL_SYMMETRIC",
-   "sources": [
-    {
-     "kind": "literature",
-     "ref": "Totaro, Zardin & Borghi 2025, Evaluation of a simple method to estimate the shaft torque in a gerotor pump",
-     "use": "Eqs. (8)-(9) bearing load split"
-    }
-   ],
-   "statement": "W/2 per bearing; object = Totaro Eq.(8)-(9) lever-arm split.",
    "switch": "journal",
-   "text": "W/2 per bearing; object = Totaro Eq.(8)-(9) lever-arm split.",
-   "usedBy": [
-    "friction",
-    "operating"
-   ],
-   "value": null,
-   "variants": [
-    {
-     "meaning": "symmetric W/2 per bearing",
-     "value": null
-    },
-    {
-     "meaning": "{l1, l2, L1, L2} lever-arm split",
-     "value": "object"
-    }
-   ]
+   "text": "W/2 per bearing; object = Totaro Eq.(8)-(9) lever-arm split."
   },
   {
-   "active": "lambda = R/(N e)",
    "default": "ivanovic",
    "id": "A-D7",
-   "literatureVariant": false,
    "name": "LAMBDA_IVANOVIC",
-   "sources": [
-    {
-     "kind": "literature",
-     "ref": "Ivanovic et al. 2012",
-     "use": "lambda definition"
-    },
-    {
-     "kind": "literature",
-     "ref": "Gamez-Montero et al. (gerotor design review)",
-     "use": "Eq.(3) inverse"
-    }
-   ],
-   "statement": "lambda = R/(N e); Gamez uses the inverse.",
    "switch": "lambdaConvention",
-   "text": "lambda = R/(N e); Gamez uses the inverse.",
-   "usedBy": [
-    "geometry"
-   ],
-   "value": "ivanovic",
-   "variants": [
-    {
-     "meaning": "lambda = R/(N e)",
-     "value": "ivanovic"
-    },
-    {
-     "meaning": "lambda_G = N e / R (label only)",
-     "value": "gamez"
-    }
-   ]
+   "text": "lambda = R/(N e) (settled: Ivanovic = Bonandrini alpha3 = Colbourne b/(e m)); Gamez uses the inverse."
   },
   {
-   "active": "fixed",
    "default": null,
    "id": "A-D8a",
-   "literatureVariant": false,
    "name": "HERTZ_SINGLE_LOBE",
-   "sources": [
-    {
-     "kind": "literature",
-     "ref": "Totaro, Zardin & Borghi 2025, Evaluation of a simple method to estimate the shaft torque in a gerotor pump",
-     "use": "single-contact hypothesis p.4"
-    }
-   ],
-   "statement": "Whole balancing force on one lobe (conservative in double contact).",
    "switch": null,
-   "text": "Whole balancing force on one lobe (conservative in double contact).",
-   "usedBy": [
-    "contact"
-   ],
-   "value": null,
-   "variants": []
+   "text": "Whole balancing force on one lobe (conservative in double contact)."
   },
   {
-   "active": "fixed",
    "default": null,
    "id": "A-D8b",
-   "literatureVariant": false,
    "name": "HERTZ_CONFORMAL_CAP",
-   "sources": [
-    {
-     "kind": "literature",
-     "ref": "Johnson, Contact Mechanics (Hertz line contact)",
-     "use": "Hertz line contact, validity a << rho"
-    }
-   ],
-   "statement": "rho_eq capped at 1e4 mm; Hertz validity a/rho reported, not enforced.",
    "switch": null,
-   "text": "rho_eq capped at 1e4 mm; Hertz validity a/rho reported, not enforced.",
-   "usedBy": [
-    "contact"
-   ],
-   "value": null,
-   "variants": []
+   "text": "rho_eq capped at 1e4 mm; Hertz validity a/rho reported, not enforced."
   },
   {
-   "active": "fixed",
+   "default": null,
+   "id": "A-D9",
+   "name": "PERIPHERY_SEALED",
+   "switch": null,
+   "text": "Outer-rotor periphery (and unvented bore) is a massless, sealed node joined to every chamber by the same face conductance, so its pressure is the mean chamber pressure."
+  },
+  {
    "default": null,
    "id": "A-AC1",
-   "literatureVariant": false,
    "name": "HERTZ_GEAR_ANALOGY",
-   "sources": [
-    {
-     "kind": "standard",
-     "ref": "ISO 6336-5:2016 (catalogue level only, not read)",
-     "use": "concept of limit stress number / safety factor"
-    }
-   ],
-   "statement": "Gerotor 2-D Hertz peak pressure is compared with a gear contact limit stress (ISO 6336-5 style allowable = sigma_Hlim / S). Modelling analogy: ISO 6336 covers involute gears, not gerotor profiles; no allowable value is shipped.",
    "switch": null,
-   "text": "Gerotor 2-D Hertz peak pressure is compared with a gear contact limit stress (ISO 6336-5 style allowable = sigma_Hlim / S). Modelling analogy: ISO 6336 covers involute gears, not gerotor profiles; no allowable value is shipped.",
-   "usedBy": [
-    "acceptance"
-   ],
-   "value": null,
-   "variants": []
+   "text": "Gerotor 2-D Hertz peak pressure is compared with a gear contact limit stress (ISO 6336-5 style allowable = sigma_Hlim / S). Modelling analogy: ISO 6336 covers involute gears, not gerotor profiles; no allowable value is shipped."
   }
  ],
- "backendGit": "1a61bb2",
+ "backendGit": "20031e7",
  "methods": [
   {
    "assumptions": [
@@ -291,7 +90,11 @@
    "module": "gerotor_core.geometry",
    "references": [
     "Ivanovic et al. 2012",
-    "Gamez-Montero et al. (gerotor design review)"
+    "Gamez-Montero et al. (gerotor design review)",
+    "Colbourne 1975, Trans. CSME 3(4) 215-223",
+    "Colbourne 1975, Trans. CSME 3(4) 215-223 Table 2 / Fig. 1, Eq. 11, Eq. 28",
+    "user input (no default; missing -> NOT EVALUATED)",
+    "docs/convergence.md (convergence / sensitivity study, 4 reference designs)"
    ],
    "sources": [
     {
@@ -303,6 +106,26 @@
      "kind": "literature",
      "ref": "Gamez-Montero et al. (gerotor design review)",
      "use": "lambda_G = N e / R Eq.(3), recommended range 0.6-0.8"
+    },
+    {
+     "kind": "literature",
+     "ref": "Colbourne 1975, Trans. CSME 3(4) 215-223",
+     "use": "trochoid curvature Eq. 8, undercut Eq. 9-11, RvMin p. 219, dA/dpsi Eq. 28, flow Eq. 29"
+    },
+    {
+     "kind": "validation",
+     "ref": "Colbourne 1975, Trans. CSME 3(4) 215-223 Table 2 / Fig. 1, Eq. 11, Eq. 28",
+     "use": "tests/test_literature_validation.py: rho_min, flow, flow variation, dA reproduced"
+    },
+    {
+     "kind": "user input",
+     "ref": "user input (no default; missing -> NOT EVALUATED)",
+     "use": "N, e, R, rp, b, c, OD, bore, rpm, dp, Rv/RvClear (InvalidDesign if missing)"
+    },
+    {
+     "kind": "numerical-justified",
+     "ref": "docs/convergence.md (convergence / sensitivity study, 4 reference designs)",
+     "use": "grid, sample, sub-step and iteration settings"
     }
    ],
    "summary": "Gerotor geometry and kinematic analysis (port of js/geometry.js)."
@@ -313,14 +136,17 @@
    ],
    "equations": [
     "h_k = c + d_k (signed normal distance lobe centre to trochoid)",
-    "delta(t): min_k h_k(delta) = 0 (bisection), period 2 pi / N"
+    "delta(t) = OUTER-ROTOR LAG: min_k h_k(delta) = 0 (bisection), period 2 pi / N",
+    "inner-gear lag (Ivanovic) = delta N / (N - 1)"
    ],
    "id": "backlash",
    "method": "Outer-rotor lag (backlash) from the clearance gap function",
    "module": "gerotor_core.backlash",
    "references": [
     "Ivanovic et al. 2012",
-    "Rundo 2017"
+    "Rundo 2017",
+    "Ivanovic et al. 2012 Figs. 9a/10a (fixed axes, u = 1.2)",
+    "docs/convergence.md (convergence / sensitivity study, 4 reference designs)"
    ],
    "sources": [
     {
@@ -331,7 +157,17 @@
     {
      "kind": "literature",
      "ref": "Rundo 2017",
-     "use": "sec. 4.1.3 contact with clearance"
+     "use": "sec. 4.1.3 contact with clearance, Eq. 24-25"
+    },
+    {
+     "kind": "validation",
+     "ref": "Ivanovic et al. 2012 Figs. 9a/10a (fixed axes, u = 1.2)",
+     "use": "outer-rotor lag x N/(N-1) = inner-gear lag 0.22-0.29 deg reproduced"
+    },
+    {
+     "kind": "numerical-justified",
+     "ref": "docs/convergence.md (convergence / sensitivity study, 4 reference designs)",
+     "use": "grid, sample, sub-step and iteration settings"
     }
    ],
    "summary": "Tooth contact with clearance / backlash (port of js/backlash.js)."
@@ -349,7 +185,10 @@
    "references": [
     "Kim et al. 2006",
     "Gamez-Montero et al. (gerotor design review)",
-    "Rundo 2017"
+    "Rundo 2017",
+    "Kim 2006 p. 1629: dp = K dV/V (1 % ~ 17 MPa at K = 1.62 GPa)",
+    "user input (no default; missing -> NOT EVALUATED)",
+    "docs/convergence.md (convergence / sensitivity study, 4 reference designs)"
    ],
    "sources": [
     {
@@ -366,12 +205,31 @@
      "kind": "literature",
      "ref": "Rundo 2017",
      "use": "lumped chamber pressure model"
+    },
+    {
+     "kind": "derivation",
+     "ref": "Kim 2006 p. 1629: dp = K dV/V (1 % ~ 17 MPa at K = 1.62 GPa)",
+     "use": "trapped-volume pressure rise = K x swing; the allowed swing / rise is a user criterion (C-TRAPPED, empty)"
+    },
+    {
+     "kind": "user input",
+     "ref": "user input (no default; missing -> NOT EVALUATED)",
+     "use": "rho, bulk, Cd, pIn, pVap, porting layout, grooveW (if grooves)"
+    },
+    {
+     "kind": "numerical-justified",
+     "ref": "docs/convergence.md (convergence / sensitivity study, 4 reference designs)",
+     "use": "grid, sample, sub-step and iteration settings"
     }
    ],
    "summary": "Port plate (kidney ports), opening areas and single-chamber pressure model (port of js/ports.js)."
   },
   {
-   "assumptions": [],
+   "assumptions": [
+    "A-D3",
+    "A-D8b",
+    "A-D9"
+   ],
    "equations": [
     "dp_k/dt = K/V_k (sum Q_in,k - dV_k/dt)",
     "tip/flank gap: Q = 2 b h^{5/2} dp / (9 pi mu sqrt(2 rho_eq))",
@@ -384,7 +242,11 @@
    "references": [
     "Rundo 2017",
     "Kim et al. 2006",
-    "Reynolds equation, laminar Poiseuille gap flow (docs/lumped-model.md)"
+    "Reynolds equation, laminar Poiseuille gap flow (docs/lumped-model.md)",
+    "periphery / unvented bore node mass balance sum_k G (p_k - p_node) = 0 with equal G (docs/lumped-model.md)",
+    "docs/convergence.md 'Guards' (bracket and division guards)",
+    "user input (no default; missing -> NOT EVALUATED)",
+    "docs/convergence.md (convergence / sensitivity study, 4 reference designs)"
    ],
    "sources": [
     {
@@ -401,6 +263,26 @@
      "kind": "derivation",
      "ref": "Reynolds equation, laminar Poiseuille gap flow (docs/lumped-model.md)",
      "use": "gap conductances; Couette flow not modelled"
+    },
+    {
+     "kind": "derivation",
+     "ref": "periphery / unvented bore node mass balance sum_k G (p_k - p_node) = 0 with equal G (docs/lumped-model.md)",
+     "use": "p_node = mean chamber pressure (A-D9)"
+    },
+    {
+     "kind": "derivation",
+     "ref": "docs/convergence.md 'Guards' (bracket and division guards)",
+     "use": "RHO_EQ_INV_MIN, PRESSURE_BRACKET_PA, BRACKET_DOUBLINGS do not change a converged result"
+    },
+    {
+     "kind": "user input",
+     "ref": "user input (no default; missing -> NOT EVALUATED)",
+     "use": "nu, axialClr, shaftVent (leakOn; no default)"
+    },
+    {
+     "kind": "numerical-justified",
+     "ref": "docs/convergence.md (convergence / sensitivity study, 4 reference designs)",
+     "use": "grid, sample, sub-step and iteration settings"
     }
    ],
    "summary": "Multi-chamber lumped-parameter model with internal leakage (port of js/leakage.js)."
@@ -422,7 +304,9 @@
    "references": [
     "Rundo 2017",
     "Johnson, Contact Mechanics (Hertz line contact)",
-    "Ivanovic 2020 (after Colbourne)",
+    "Ivanovic 2020 (not on the desk; not in Colbourne 1974/1975 or Ivanovic 2021)",
+    "user input (no default; missing -> NOT EVALUATED)",
+    "docs/convergence.md (convergence / sensitivity study, 4 reference designs) (rho_eq cap 1e3/1e4/1e5 mm)",
     "Totaro, Zardin & Borghi 2025, Evaluation of a simple method to estimate the shaft torque in a gerotor pump"
    ],
    "sources": [
@@ -437,9 +321,19 @@
      "use": "Hertz line contact"
     },
     {
-     "kind": "literature",
-     "ref": "Ivanovic 2020 (after Colbourne)",
-     "use": "wear-rate proportional factor"
+     "kind": "unverified",
+     "ref": "Ivanovic 2020 (not on the desk; not in Colbourne 1974/1975 or Ivanovic 2021)",
+     "use": "wear-rate proportional factor WRPF = p_max v_s - provenance UNVERIFIED"
+    },
+    {
+     "kind": "user input",
+     "ref": "user input (no default; missing -> NOT EVALUATED)",
+     "use": "rotor material Ein, nuIn, Eout, nuOut (no 210 GPa / 0.3 fallback)"
+    },
+    {
+     "kind": "numerical-justified",
+     "ref": "docs/convergence.md (convergence / sensitivity study, 4 reference designs) (rho_eq cap 1e3/1e4/1e5 mm)",
+     "use": "A-D8b cap sensitivity"
     },
     {
      "kind": "literature",
@@ -466,7 +360,9 @@
    "module": "gerotor_core.friction",
    "references": [
     "Totaro, Zardin & Borghi 2025, Evaluation of a simple method to estimate the shaft torque in a gerotor pump",
-    "GDS 2016, power model (single-sided ports)"
+    "GDS 2016, power model (single-sided ports)",
+    "user input (no default; missing -> NOT EVALUATED)",
+    "docs/convergence.md (convergence / sensitivity study, 4 reference designs)"
    ],
    "sources": [
     {
@@ -478,6 +374,16 @@
      "kind": "literature",
      "ref": "GDS 2016, power model (single-sided ports)",
      "use": "single-sided port Coulomb floor friction"
+    },
+    {
+     "kind": "user input",
+     "ref": "user input (no default; missing -> NOT EVALUATED)",
+     "use": "nu, rho, axialClr, odClr, jbClr, jbLen, faceMu (single-sided only)"
+    },
+    {
+     "kind": "numerical-justified",
+     "ref": "docs/convergence.md (convergence / sensitivity study, 4 reference designs)",
+     "use": "grid, sample, sub-step and iteration settings"
     }
    ],
    "summary": "Viscous / Coulomb mechanical losses, shaft torque and efficiencies (port of js/friction.js)."
@@ -524,7 +430,8 @@
    "module": "gerotor_core.perfmap",
    "references": [
     "GDS 2017, Calculation of Cavitation Limits",
-    "Rundo 2017"
+    "Rundo 2017",
+    "user input (no default; missing -> NOT EVALUATED)"
    ],
    "sources": [
     {
@@ -536,6 +443,11 @@
      "kind": "literature",
      "ref": "Rundo 2017",
      "use": "void fraction from the chamber network"
+    },
+    {
+     "kind": "user input",
+     "ref": "user input (no default; missing -> NOT EVALUATED)",
+     "use": "maxSpeed voidLimit, rpmMin, rpmMax, tol (former 0.005 / 100 / 20000 / 10 had no source)"
     }
    ],
    "summary": "Performance map, filling-limited speed and GDS cavitation limits (port of js/perfmap.js)."
@@ -546,7 +458,7 @@
     "A-D6"
    ],
    "equations": [
-    "Q_out from the chamber network; eta_v = Q_out / Q_th",
+    "Q_out from the chamber network; eta_v = Q_out / Q_th (includes leakage, compressibility and incomplete filling - not a pure leakage efficiency)",
     "M_shaft per friction model; eta_m = M_th / M_shaft"
    ],
    "id": "operating",
@@ -574,14 +486,17 @@
    "assumptions": [],
    "equations": [
     "log10(log10(nu + 0.7)) = A - B log10(T[K]) (nu >= 2 cSt)",
-    "rho(T) = rho15 (1 - 6.5e-4 (T - 15))"
+    "rho(T) = rho15 (1 - alpha (T - 15)), alpha = rhoExp [1/K] user input"
    ],
    "id": "fluid",
    "method": "Oil viscosity and density vs temperature",
    "module": "gerotor_core.fluid",
    "references": [
     "ASTM D341 (Ubbelohde-Walther)",
-    "UNEXPLAINED: linear thermal expansion coefficient 6.5e-4 1/K has no documented source or derivation yet (audit R02)"
+    "ISO 3448 viscosity grades (clause not verified)",
+    "OILS nu100, rho15 and all non-ISO-VG rows (fluid.OILS source tags)",
+    "user input (no default; missing -> NOT EVALUATED)",
+    "user-oil Walther fit rms deviation reported as information (former 5 % warning limit had no source)"
    ],
    "sources": [
     {
@@ -590,9 +505,24 @@
      "use": "viscosity-temperature relation"
     },
     {
+     "kind": "standard",
+     "ref": "ISO 3448 viscosity grades (clause not verified)",
+     "use": "ISO VG nu40 = grade midpoint"
+    },
+    {
      "kind": "unsourced",
-     "ref": "UNEXPLAINED: linear thermal expansion coefficient 6.5e-4 1/K has no documented source or derivation yet (audit R02)",
-     "use": "density"
+     "ref": "OILS nu100, rho15 and all non-ISO-VG rows (fluid.OILS source tags)",
+     "use": "using a library oil marks the report NOT FOR CERTIFICATION until References/Oil-Datasheets/sources.md cites it (fluid.load_sources)"
+    },
+    {
+     "kind": "user input",
+     "ref": "user input (no default; missing -> NOT EVALUATED)",
+     "use": "rhoExp [1/K] thermal expansion coefficient (former unsourced 6.5e-4 removed, audit R02); absent -> density not temperature-corrected, check row 'density temperature correction NOT EVALUATED'"
+    },
+    {
+     "kind": "derivation",
+     "ref": "user-oil Walther fit rms deviation reported as information (former 5 % warning limit had no source)",
+     "use": "rms of nu_fit/nu - 1 over the datasheet points"
     }
    ],
    "summary": "Oil properties vs temperature (port of js/fluid.js)."
@@ -628,6 +558,43 @@
   },
   {
    "assumptions": [
+    "A-D3",
+    "A-D5"
+   ],
+   "equations": [
+    "monotone axis (axialClr, odClr, jbClr): extreme at the band ends -> vertex enumeration, exact",
+    "non-monotone axis (c: eta_hm has an interior minimum): GRID_LEVELS uniform points + parabola vertex f1 - (f2 - f0)^2 / (8 (f0 - 2 f1 + f2)) at interior extrema",
+    "eta enclosure [min eta_v min eta_hm, max eta_v max eta_hm] (eta_v, eta_hm > 0)"
+   ],
+   "id": "tolerance",
+   "method": "Clearance tolerance -> intervals of eta_v, eta_hm and eta per load case",
+   "module": "gerotor_core.tolerance",
+   "references": [
+    "docs/tolerance.md (monotonicity sweeps, 3 designs x 3 operating points x 4 clearances; tests/test_tolerance.py)",
+    "docs/tolerance.md grid study 3/5/9/17 levels",
+    "user input (no default; missing -> NOT EVALUATED)"
+   ],
+   "sources": [
+    {
+     "kind": "derivation",
+     "ref": "docs/tolerance.md (monotonicity sweeps, 3 designs x 3 operating points x 4 clearances; tests/test_tolerance.py)",
+     "use": "axis classification and interval method"
+    },
+    {
+     "kind": "numerical-justified",
+     "ref": "docs/tolerance.md grid study 3/5/9/17 levels",
+     "use": "GRID_LEVELS = 5"
+    },
+    {
+     "kind": "user input",
+     "ref": "user input (no default; missing -> NOT EVALUATED)",
+     "use": "settings.clearanceTolerance {c, axialClr, odClr, jbClr: {min, max}} (no default band)"
+    }
+   ],
+   "summary": "Clearance tolerance -> intervals of eta_v, eta_hm and eta (port of js/tolerance.js)."
+  },
+  {
+   "assumptions": [
     "A-AC1"
    ],
    "equations": [
@@ -644,7 +611,9 @@
    "references": [
     "production-expert acceptance-criteria model 2026-10-31 (company report)",
     "ISO 6336-5:2016 (catalogue level only, not read)",
-    "Johnson, Contact Mechanics (Hertz line contact)"
+    "Johnson, Contact Mechanics (Hertz line contact)",
+    "Colbourne 1975, Trans. CSME 3(4) 215-223 Eq. 9-11; Bonandrini et al. 2009, Proc. IMechE C 223 1469-1479 Eq. 7",
+    "Kim 2006 p. 1629 (dp = K dV/V)"
    ],
    "sources": [
     {
@@ -661,34 +630,20 @@
      "kind": "literature",
      "ref": "Johnson, Contact Mechanics (Hertz line contact)",
      "use": "Hertz line-contact relations used for a / rho_eq"
+    },
+    {
+     "kind": "literature",
+     "ref": "Colbourne 1975, Trans. CSME 3(4) 215-223 Eq. 9-11; Bonandrini et al. 2009, Proc. IMechE C 223 1469-1479 Eq. 7",
+     "use": "hard undercut limit rp + c < rho_min (C-UNDERCUT); the 0.85 sharp-tip factor is NOT sourced and stays an empty user criterion (C-TIP-SHARP)"
+    },
+    {
+     "kind": "derivation",
+     "ref": "Kim 2006 p. 1629 (dp = K dV/V)",
+     "use": "trapped-volume swing -> pressure rise route for C-TRAPPED; limit stays an empty user criterion"
     }
    ],
    "summary": "Authority-independent acceptance criteria: profiles, material library, overrides, evaluation."
   }
  ],
- "projectSchema": "gerotor-project/4",
- "software": {
-  "api": "0.2.0",
-  "gerotor_core": "0.1.0",
-  "git": "1a61bb2",
-  "numpy": "2.5.4",
-  "python": "3.15.2"
- },
- "source": "GET http://127.0.0.1:8770/api/methods",
- "variantDefaults": {
-  "cavAreaDoubleFill": true,
-  "cavHead": "inlet",
-  "clearanceConvention": "diametral",
-  "clearanceInput": "equidistance",
-  "journal": null,
-  "lambdaConvention": "ivanovic"
- },
- "variants": {
-  "cavAreaDoubleFill": true,
-  "cavHead": "inlet",
-  "clearanceConvention": "diametral",
-  "clearanceInput": "equidistance",
-  "journal": null,
-  "lambdaConvention": "ivanovic"
- }
+ "source": "in-process api.report (endpoint not reachable)"
 }; })(window.Gerotor = window.Gerotor || {});

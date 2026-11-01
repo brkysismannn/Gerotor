@@ -19,7 +19,7 @@
   const SCHEMA = 'gerotor-project/4';
   const SCHEMA_VERSION = 4;
   const EXAMPLE_LABEL = 'Example design (not a recommendation)';
-  const FLUID_KEYS = ['oil', 'oilT', 'nu', 'rho', 'bulk', 'pVap', 'uT1', 'uNu1', 'uT2', 'uNu2', 'uT3', 'uNu3', 'uRho15'];
+  const FLUID_KEYS = ['oil', 'oilT', 'nu', 'rho', 'bulk', 'pVap', 'uT1', 'uNu1', 'uT2', 'uNu2', 'uT3', 'uNu3', 'uRho15', 'rhoExp'];
   const CASE_KEYS = ['oilT', 'pIn', 'nu'];
   const EXT = '.gerotor.json';
   const HASHED_KEYS = ['design', 'fluid', 'operatingPoints', 'settings', 'measured'];     // as backend/api/project.py
@@ -358,6 +358,7 @@
     uT2: ['T_2', 'User oil datasheet point 2: temperature', '°C'], uNu2: ['ν_2', 'User oil datasheet point 2: kinematic viscosity', 'cSt'],
     uT3: ['T_3', 'User oil datasheet point 3 (optional): temperature', '°C'], uNu3: ['ν_3', 'User oil datasheet point 3 (0 = unused): kinematic viscosity', 'cSt'],
     uRho15: ['ρ_15', 'User oil density at 15 °C', 'kg/m³'],
+    rhoExp: ['α_ρ', 'Oil linear thermal expansion coefficient (datasheet); empty = density not temperature-corrected', '1/K'],
     N: ['N', 'Number of outer-rotor lobes (inner rotor has N-1 teeth)', '-'],
     e: ['e', 'Eccentricity: distance between rotor axes', 'mm'],
     R: ['R', 'Pitch-circle radius of the outer-rotor lobe centres', 'mm'],

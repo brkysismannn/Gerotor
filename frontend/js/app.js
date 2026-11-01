@@ -12,7 +12,7 @@
     leakOn: true, axialClr: 0.05, shaftVent: true, tipGapModel: 'backlash',
     Ein: 210, nuIn: 0.3, Eout: 210, nuOut: 0.3,
     odClr: 0.15, jbLen: 0, jbClr: 0.04, faceMu: 0.08,
-    oil: 'custom', oilT: 40,
+    oil: 'custom', oilT: 40, rhoExp: null,   // rhoExp [1/K]: user input, empty = density not temperature-corrected
     uT1: 40, uNu1: 32, uT2: 100, uNu2: 5.4, uT3: 0, uNu3: 0, uRho15: 870,
   };
   const STORE_KEY = 'gerotor.params.v1';
@@ -33,6 +33,7 @@
       const el = form.elements[key];
       p[key] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : G.num.parse(el.value));
     }
+    if (!Number.isFinite(p.rhoExp)) p.rhoExp = null;   // optional user input (no default)
     p.N = Math.round(p.N);
     return p;
   }
@@ -97,14 +98,16 @@
     // User oil: ASTM D341 line through the datasheet points.
     const oilKey = form.elements.oil.value, oilT = G.num.parse(form.elements.oilT.value);
     const oil = oilKey === 'user' ? G.userOil(readForm(), oilT)
-      : oilKey !== 'custom' ? G.oilProperties(oilKey, oilT) : null;
+      : oilKey !== 'custom' ? G.oilProperties(oilKey, oilT, readForm().rhoExp) : null;
     const oilOk = !!(oil && Number.isFinite(oil.nu) && oil.nu > 0);
-    form.elements.nu.disabled = form.elements.rho.disabled = oilOk;
+    const rhoOk = oilOk && Number.isFinite(oil.rho);     // no rhoExp: the user density stays in use
+    form.elements.nu.disabled = oilOk;
+    form.elements.rho.disabled = rhoOk;
     form.elements.oilT.disabled = !oil;
     $('userOil').hidden = oilKey !== 'user';
     if (oilOk) {
       form.elements.nu.value = oil.nu.toFixed(2);
-      form.elements.rho.value = oil.rho.toFixed(0);
+      if (rhoOk) form.elements.rho.value = oil.rho.toFixed(0);
     }
     lastOil = { oil, T: oilT };
     drawOilCurve(oil, oilT);

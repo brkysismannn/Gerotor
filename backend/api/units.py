@@ -7,7 +7,7 @@ raises ``UnitError`` (HTTP 422 ``InvalidUnit``).
 
 Supported: length mm, m, um (also µm, cm); pressure bar, Pa, kPa, MPa (bar(a) = absolute bar,
 same factor); speed rpm (also 1/min); kinematic viscosity cSt, mm2/s, mm^2/s, m2/s; temperature
-degC, K; density kg/m3, kg/m^3; dimensionless "-" / "".
+degC, K; density kg/m3, kg/m^3; thermal expansion 1/K (= 1/degC); dimensionless "-" / "".
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ UNITS = {
     "m2/s": ("kinvisc", 1.0, 0.0), "m^2/s": ("kinvisc", 1.0, 0.0),
     "degC": ("temperature", 1.0, 273.15), "K": ("temperature", 1.0, 0.0),
     "kg/m^3": ("density", 1.0, 0.0), "kg/m3": ("density", 1.0, 0.0),
+    "1/K": ("thermexp", 1.0, 0.0), "1/degC": ("thermexp", 1.0, 0.0),
     "-": ("none", 1.0, 0.0), "": ("none", 1.0, 0.0),
 }
 

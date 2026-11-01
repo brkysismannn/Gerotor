@@ -4905,7 +4905,7 @@
 },
 "oil": {
 "nu": 18.60495443693681,
-"rho": 847.7,
+"rho": "NaN",
 "label": "ISO VG 46 (HLP 46)",
 "fit": {
 "A": 9.417992554335934,
@@ -4918,7 +4918,7 @@
 },
 "userOil": {
 "nu": 18.085461713588835,
-"rho": 847.7,
+"rho": "NaN",
 "fit": {
 "A": 8.955570810440248,
 "B": 3.5030065719798946,
@@ -4928,7 +4928,8 @@
 "n": 3
 },
 "notes": [
-"datasheet points deviate 7 % rms from one Walther line"
+"datasheet points deviate 6.6 % rms from one Walther line",
+"density not temperature-corrected: thermal expansion coefficient rhoExp not entered"
 ],
 "points": [
 [

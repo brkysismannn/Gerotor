@@ -77,7 +77,7 @@ def compare(py, ref, path, errors, scale=None, key=None):
         if py != ref:
             errors.append(f"{path}: {py!r} != {ref!r}")
         return
-    py = float(py)
+    py = math.nan if py is None else float(py)  # Python None == JS NaN (e.g. rho without rhoExp)
     if math.isnan(ref):
         if not math.isnan(py):
             errors.append(f"{path}: {py} != NaN")

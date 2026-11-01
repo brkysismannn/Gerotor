@@ -21,7 +21,7 @@ _SCHEMA = json.loads((SCHEMA_DIR / "project.schema.json").read_text(encoding="ut
 _VALIDATOR = jsonschema.Draft202012Validator(_SCHEMA)
 
 HASHED_KEYS = ("design", "fluid", "operatingPoints", "settings", "measured")
-FLUID_KEYS = ("oil", "oilT", "nu", "rho", "bulk", "pVap")
+FLUID_KEYS = ("oil", "oilT", "nu", "rho", "bulk", "pVap", "rhoExp")
 DERIVED_DESIGN_KEYS = ("faceSupport", "doubleFill")
 
 

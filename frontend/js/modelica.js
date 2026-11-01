@@ -59,17 +59,18 @@
 
   /*
    * Oil temperature model for Modelica: Walther (ASTM D341) A, B of the selected oil (preset or
-   * datasheet fit) and ρ15 with linear expansion; 'custom' oil (ν, ρ only) → B = 0, α = 0 (constant).
+   * datasheet fit) and ρ15 with linear expansion α = user input rhoExp; 'custom' oil (ν, ρ only) → B = 0,
+   * α = 0 (constant). No rhoExp: ρ = the user density, constant (α = 0), as the browser model.
    */
   function oilData(p) {
     const T = Number.isFinite(p.oilT) ? p.oilT : 40;
     let fit = null, rho15 = p.rho, alpha = 0, label = 'custom (constant nu, rho)';
     if (p.oil === 'user' && G.userOil) {
       const u = G.userOil(p, T);
-      if (u && u.fit) { fit = u.fit; rho15 = p.uRho15; alpha = 6.5e-4; label = 'datasheet oil (ASTM D341 fit)'; }
+      if (u && u.fit) { fit = u.fit; if (Number.isFinite(p.rhoExp)) { rho15 = p.uRho15; alpha = p.rhoExp; } label = 'datasheet oil (ASTM D341 fit)'; }
     } else if (p.oil && p.oil !== 'custom' && G.OILS && G.OILS[p.oil]) {
       const o = G.OILS[p.oil];
-      fit = G.waltherFit(o.nu40, o.nu100); rho15 = o.rho15; alpha = 6.5e-4; label = o.label;
+      fit = G.waltherFit(o.nu40, o.nu100); if (Number.isFinite(p.rhoExp)) { rho15 = o.rho15; alpha = p.rhoExp; } label = o.label;
     }
     if (!fit) fit = { A: Math.log10(Math.log10(p.nu + 0.7)), B: 0 };
     return { A: fit.A, B: fit.B, rho15, alpha, T, label: label.replace(/"/g, "'") };

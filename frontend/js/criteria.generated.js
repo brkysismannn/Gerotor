@@ -1387,6 +1387,6 @@
   }
  ],
  "schemaVersion": 1,
- "source": "GET http://127.0.0.1:8770/api/criteria/profiles",
+ "source": "in-process api.criteria.catalogue() (endpoint not reachable)",
  "statement": "This report is a calculation result against the criteria profile named above. No limit value is supplied by the software; all limits shown were entered by the user (see overrides) or are internal model-validity checks. Final acceptance of the design rests with the user's certifying authority or customer; this report does not constitute certification or approval."
 }; })(window.Gerotor = window.Gerotor || {});

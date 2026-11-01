@@ -28,7 +28,7 @@ import copy
 import math
 
 import gerotor_core as G
-from gerotor_core import InvalidDesignError, contact, fluid, friction, geometry, perfmap, reverse, spectrum
+from gerotor_core import InvalidDesignError, contact, fluid, friction, geometry, perfmap, reverse, spectrum, tolerance
 
 from . import units
 from .project import design_units
@@ -227,6 +227,7 @@ NUMERIC_SETTINGS = {
     "backlash": ("NEWTON_ITERS", "NEWTON_TOL", "DELTA_DOUBLINGS", "DELTA_BISECT", "CONTACT_GAP_FRAC"),
     "friction": ("ECC_BISECT",),
     "contact": ("LOBE_PROBE_LAG",),
+    "tolerance": ("GRID_LEVELS",),
 }
 
 
@@ -307,6 +308,7 @@ def run(body: dict, modules=None) -> dict:
     out["notEvaluated"] = nev
     out["checks"] += [_missing_check(m, k) for m, k in nev.items()]
     out["checks"] += oil_check(p)
+    out["checks"] += density_check(p, ops)
     out["certification"] = certification(out["checks"])
     out["valid"] = bool(res.get("valid"))
     if not res.get("valid"):
@@ -361,7 +363,10 @@ def run(body: dict, modules=None) -> dict:
         for i, op in enumerate(ops):
             r = perfmap.operating_point(case_design(p, op), res, float(op["rpm"]), float(op["dp"]))
             r.update({k: op[k] for k in ("oilT", "pIn") if op.get(k) is not None})
-            rows.append(dict(r, name=op.get("name") or f"OP{i + 1}"))
+            rows.append(dict(r, name=op.get("name") or f"OP{i + 1}", etaVBasis=ETA_V_BASIS))
+        if s.get("clearanceTolerance"):
+            for row, op in zip(rows, ops):
+                row["tolerance"] = tolerance_interval(inputs, v, op, s)
         out["operating"] = rows
     if "reverse" in modules and measured:
         out["reverse"] = _reverse(measured)
@@ -393,12 +398,54 @@ def case_design(p: dict, op: dict) -> dict:
         q["nu"] = float(op["nu"])
     elif op.get("oilT") is not None and p.get("oil"):
         t = float(op["oilT"])
-        props = fluid.user_oil(p, t) if p["oil"] == "user" else fluid.oil_properties(p["oil"], t)
+        props = fluid.user_oil(p, t) if p["oil"] == "user" else fluid.oil_properties(p["oil"], t, p.get("rhoExp"))
         if props and props.get("nu") is not None:
             q["nu"] = props["nu"]
             if props.get("rho") is not None and math.isfinite(props["rho"]):
                 q["rho"] = props["rho"]
+            else:  # no rhoExp: density stays the user's fluid rho (flagged by density_check)
+                q["rhoUncorrected"] = True
     return q
+
+
+def tolerance_interval(inputs: dict, v: dict, op: dict, s: dict) -> dict:
+    """eta_v, eta_hm, eta intervals of one load case over settings.clearanceTolerance (gerotor_core.tolerance).
+    Bands are in the input unit / convention of each clearance (A-D3, A-D5 are applied by build_design)."""
+    try:
+        bands = tolerance.check_bands(s["clearanceTolerance"], design_values(inputs))
+    except ValueError as exc:
+        raise InvalidDesignError(str(exc)) from None
+    rpm, dp = float(op["rpm"]), float(op["dp"])
+
+    def make(ov):
+        return case_design(build_design(dict(inputs, **ov), v), op)
+
+    def analyse(p):
+        return geometry.analyse(p, samples=int(s["samples"]), skip=("contact", "mech"))
+
+    def op_point(p, res, mds):
+        return perfmap.operating_point(p, res, rpm, dp, mds)
+
+    return tolerance.interval(make, analyse, op_point, bands)
+
+
+def density_check(p: dict, ops) -> list[dict]:
+    """Check row when load cases at oilT use an oil model but the expansion coefficient rhoExp is absent:
+    the density is then NOT temperature-corrected (fluid rho is used); no default coefficient is applied."""
+    if p.get("rhoExp") is not None or not p.get("oil") or p["oil"] == "custom":
+        return []
+    names = [op.get("name") or f"OP{i + 1}" for i, op in enumerate(ops)
+             if isinstance(op, dict) and op.get("oilT") is not None and op.get("nu") is None]
+    if not names:
+        return []
+    return [{"level": "missing", "title": "Missing input - density temperature correction NOT EVALUATED",
+             "module": "fluid", "missing": ["fluid.rhoExp"],
+             "detail": "no thermal expansion coefficient entered; load cases " + ", ".join(names)
+                       + " use the fluid density rho unchanged (former 6.5e-4 1/K had no source)"}]
+
+
+ETA_V_BASIS = ("eta_v = Q_out / Q_th from the chamber network: includes internal leakage, fluid compressibility "
+               "and incomplete filling (void fraction); it is not a pure leakage efficiency")
 
 
 def _reverse(measured):

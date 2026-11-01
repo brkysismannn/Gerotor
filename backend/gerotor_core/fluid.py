@@ -3,7 +3,9 @@
 Kinematic viscosity - ASTM D341 (Ubbelohde-Walther):
     log10(log10(nu + 0.7)) = A - B log10(T[K])     (nu in cSt, valid for nu >= 2 cSt)
 Two points -> exact A, B; three or more -> least squares in Walther coordinates.
-Density - linear thermal expansion rho(T) = rho15 (1 - 6.5e-4 (T - 15)).
+Density - linear thermal expansion rho(T) = rho15 (1 - alpha (T - 15)); alpha [1/K] = user input
+``rhoExp`` (no default: the former 6.5e-4 1/K had no source, audit R02). Without alpha the density
+is NOT temperature-corrected (rho = None) and the caller keeps the user's fluid rho.
 Units: nu in cSt (mm^2/s), T in deg C, rho in kg/m^3. Use ``nu_si = nu * 1e-6`` for m^2/s.
 
 Source status of the library (owner rule no-unexplained-numbers, company/memory/oil-library-sourcing):
@@ -179,15 +181,19 @@ def viscosity_at(nu40, nu100, tC):
     return viscosity_from_fit(walther_fit(nu40, nu100), tC)
 
 
-def density_at(rho15, tC):
-    return rho15 * (1 - 6.5e-4 * (tC - 15))
+def density_at(rho15, tC, alpha=None):
+    """rho15 (1 - alpha (tC - 15)) [kg/m^3]; None if alpha (user input rhoExp, 1/K) or rho15 is missing."""
+    if alpha is None or rho15 is None:
+        return None
+    return rho15 * (1 - alpha * (tC - 15))
 
 
-def oil_properties(key, tC):
+def oil_properties(key, tC, alpha=None):
+    """nu, rho of a library oil at tC; rho = None unless the expansion coefficient alpha [1/K] is given."""
     o = OILS.get(key)
     if not o:
         return None
-    return {"nu": viscosity_at(o["nu40"], o["nu100"], tC), "rho": density_at(o["rho15"], tC),
+    return {"nu": viscosity_at(o["nu40"], o["nu100"], tC), "rho": density_at(o["rho15"], tC, alpha),
             "label": o["label"], "fit": walther_fit(o["nu40"], o["nu100"]),
             "source": {q: o["source"][q]["status"] for q in QUANTITIES}}
 
@@ -206,8 +212,10 @@ def user_oil(p, tC):
         notes.append(f"extrapolated outside the datasheet range {fit['tMin']}...{fit['tMax']} C")
     if nu < NU_MIN:
         notes.append(f"nu < {NU_MIN} cSt: outside the ASTM D341 (0.7) range")
-    if fit["n"] > 2 and fit["rms"] > 0.05:
-        notes.append(f"datasheet points deviate {100 * fit['rms']:.0f} % rms from one Walther line")
+    if fit["n"] > 2:  # information only: no acceptance limit is shipped (former 5 % had no source)
+        notes.append(f"datasheet points deviate {100 * fit['rms']:.1f} % rms from one Walther line")
     if not (fit["B"] > 0):
         notes.append("viscosity does not fall with temperature - check the inputs")
-    return {"nu": nu, "rho": density_at(p.get("uRho15"), tC), "fit": fit, "notes": notes, "points": pts}
+    if p.get("rhoExp") is None:
+        notes.append("density not temperature-corrected: thermal expansion coefficient rhoExp not entered")
+    return {"nu": nu, "rho": density_at(p.get("uRho15"), tC, p.get("rhoExp")), "fit": fit, "notes": notes, "points": pts}

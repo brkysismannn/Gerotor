@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 JS = next((d for d in (ROOT / "frontend" / "js", ROOT / "js") if d.is_dir()), ROOT / "frontend" / "js")
 OUT = ROOT / "backend" / "tests" / "reference"
 FILES = ["geometry.js", "backlash.js", "leakage.js", "contact.js", "friction.js", "fluid.js",
-         "ports.js", "spectrum.js", "reverse.js", "perfmap.js",
+         "ports.js", "spectrum.js", "reverse.js", "perfmap.js", "tolerance.js",
          "criteria.generated.js", "criteria.js"]  # criteria: JS check rows are neutralised (NOT EVALUATED)
 
 BASE = dict(

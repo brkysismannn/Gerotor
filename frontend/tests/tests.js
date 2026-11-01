@@ -782,7 +782,8 @@
     record(S, 'Three collinear points: rms deviation', 0, 100 * f3.fit.rms, 1e-6, { abs: true, unit: '%' });
     // Independent check: Mobil DTE 10 Excel 32 datasheet (reproduced in the GDS correlation study):
     // 32.7 cSt @ 40 °C, 6.63 cSt @ 100 °C, Brookfield 1090 cP @ −20 °C, ρ15 846.8 kg/m³.
-    const dte = oil({ uNu1: 32.7, uNu2: 6.63, uRho15: 846.8 });
+    // rhoExp 6.5e-4 1/K: example input of this test only (no software default; the user enters the datasheet value).
+    const dte = oil({ uNu1: 32.7, uNu2: 6.63, uRho15: 846.8, rhoExp: 6.5e-4 });
     const at20 = G.userOil(dte, -20);
     record(S, 'DTE 10 Excel 32: extrapolated ν(−20 °C) vs Brookfield 1090 cP / ρ', 1090 / (at20.rho / 1000), at20.nu, 20,
       { note: 'extrapolation 60 K below the datasheet range; high-VI oil' });
@@ -795,7 +796,9 @@
     check(S, 'ν < 2 cSt (outside the 0.7-form range) is flagged', G.userOil(oil({}), 250).notes.some(n => /2 cSt/.test(n)));
     check(S, 'Inconsistent third point (non-Walther) is flagged', G.userOil(oil({ uT3: 0, uNu3: 100 }), 40).notes.some(n => /deviate/.test(n)));
     check(S, 'Both points at one temperature → error', !!G.userOil(oil({ uT2: 40 }), 40).error);
-    record(S, 'Density ρ(T) = ρ15·(1 − 6.5·10⁻⁴·(T − 15))', 870 * (1 - 6.5e-4 * 65), G.userOil(oil({}), 80).rho, 1e-9);
+    record(S, 'Density ρ(T) = ρ15·(1 − α·(T − 15)), α = user input rhoExp', 870 * (1 - 7e-4 * 65), G.userOil(oil({ rhoExp: 7e-4 }), 80).rho, 1e-9);
+    check(S, 'No rhoExp: density not temperature-corrected (NaN) and flagged; no default coefficient',
+      Number.isNaN(G.userOil(oil({}), 80).rho) && G.userOil(oil({}), 80).notes.some(n => /rhoExp/.test(n)) && Number.isNaN(G.oilProperties('vg46', 80).rho));
     // Fluid library: every entry is consistent and its curve passes through its datasheet values.
     const lib = Object.entries(G.OILS);
     let worst = 0;
@@ -923,7 +926,7 @@
 
     // Viscosity–temperature coupling (FluidProperties = GT "VisSensor").
     const walther = (od, T) => Math.pow(10, Math.pow(10, od.A - od.B * Math.log10(T + 273.15))) - 0.7;
-    const vg = G.OILS.vg46, pv = design(Object.assign({}, P, { oil: 'vg46', oilT: 60, nu: G.viscosityAt(vg.nu40, vg.nu100, 60), rho: G.densityAt(vg.rho15, 60) }));
+    const vg = G.OILS.vg46, pv = design(Object.assign({}, P, { oil: 'vg46', oilT: 60, nu: G.viscosityAt(vg.nu40, vg.nu100, 60), rhoExp: 6.5e-4, rho: G.densityAt(vg.rho15, 60, 6.5e-4) }));   // rhoExp: example input
     const od = G.modelica.oilData(pv);
     record(S, 'Oil data (ISO VG 46): Walther A, B give ν at the design temperature', pv.nu, walther(od, 60), 1e-9);
     record(S, 'Oil data: ν(100 °C) from the exported A, B = datasheet ν100', vg.nu100, walther(od, 100), 1e-9);
@@ -1154,7 +1157,7 @@
     const hSt = G.report.build(st, out.params, out.res, hash, { date: '2026-10-30' });
     const md = P.methodsData();
     check(S, 'R-R3: stamped + methods registry present -> not INVALID by version; git hash printed', !!md && hSt.includes('abc1234') && !hSt.includes('NOT STAMPED') && hSt.includes('data-status="' + G.report.status(out.res, { params: out.params, release: true }).text + '"'));
-    check(S, 'R-R1: report assumptions and methods come from the backend registry (IDs, texts, active variant, kind-tagged sources); no invented A-D1/A-D9', !!md && md.assumptions.every(a => hSt.includes('data-id="' + a.id + '"') && hSt.includes(G.report.esc(a.text))) && md.methods.every(m => hSt.includes('data-method="' + m.id + '"')) && !hSt.includes('data-id="A-D1"') && !hSt.includes('data-id="A-D9"') && /\[literature\]/.test(hSt) && hSt.includes('cavHead = &quot;inlet&quot; (default)'));
+    check(S, 'R-R1: report assumptions and methods come from the backend registry (IDs, texts, active variant, kind-tagged sources); no invented A-D1; A-D9 from the backend', !!md && md.assumptions.every(a => hSt.includes('data-id="' + a.id + '"') && hSt.includes(G.report.esc(a.text))) && md.methods.every(m => hSt.includes('data-method="' + m.id + '"')) && !hSt.includes('data-id="A-D1"') && md.assumptions.some(a => a.id === 'A-D9') && /\[literature\]/.test(hSt) && hSt.includes('cavHead = &quot;inlet&quot; (default)'));
     P.VERSION.gitHash = savedGit; P.VERSION.core = savedCore;    const badRaw = Object.assign({}, raw, { R: 10 });          // R < N·e: trochoid forms loops
     const badOut = G.Calc.run(badRaw);
     const badHtml = G.report.build(P.create(badRaw), badOut.params, badOut.res, 'ab'.repeat(32), {});
@@ -1445,10 +1448,35 @@
     }
   }
 
+  // ------------------------------------------------------------ 29. Clearance tolerance intervals, registry fixes (2026-10-31)
+  function suiteTolerance() {
+    const S = '29 · Clearance tolerance intervals';
+    const T = G.tolerance;
+    const xs = [0, 0.25, 0.5, 0.75, 1], q = xs.map(x => (x - 0.3) ** 2), e = T.seriesExtrema(q);
+    record(S, 'Parabolic refinement: exact minimum of a quadratic between grid points', 0, e[0], 1e-15, { abs: true, unit: '-' });
+    const syn = T.interval(ov => Object.assign({}, ov), () => null,
+      (p, res, mds) => ({ etaV: 1 - p.axialClr, etaM: 0.5, mechEtaM: mds.map(m => 0.5 + m.odClr) }), { axialClr: [0.1, 0.2], odClr: [0.1, 0.3] });
+    check(S, 'Monotone function: band ends give the exact interval; η = enclosure of the factors',
+      Math.abs(syn.etaV[0] - 0.8) < 1e-12 && Math.abs(syn.etaV[1] - 0.9) < 1e-12 && Math.abs(syn.etaM[0] - 0.6) < 1e-12 && Math.abs(syn.etaM[1] - 0.8) < 1e-12 && Math.abs(syn.etaT[0] - 0.48) < 1e-12);
+    let bad = 0;
+    for (const t of [{ zz: { min: 0, max: 1 } }, { c: { min: 0.04, max: 0.05 } }, { c: { min: 0.05, max: 0.01 } }, { c: { min: 0.01 } }]) { try { T.checkBands(t, { c: 0.03 }); } catch (_) { bad++; } }
+    check(S, 'Bands: unknown key, nominal outside, min > max, missing max are rejected', bad === 4);
+    check(S, 'c is a grid axis (η hm not monotone in c), the other clearances are band-end axes', T.AXIS_METHOD.c === 'grid' && ['axialClr', 'odClr', 'jbClr'].every(k => T.AXIS_METHOD[k] === 'corners'));
+    const P = Object.assign({}, BASE, { N: 7, e: 3, R: 30, rp: 8, c: 0.03, b: 20, OD: 80, bore: 18, RvClear: 0.5, portsOn: true, leakOn: true, rpm: 1500, dp: 50, simSub: 4 });
+    const iv = T.interval(ov => G.derive(Object.assign({}, P, ov)), p => G.analyse(p, { samples: 12 }), (p, res, mds) => G.operatingPoint(p, res, 1500, 50, mds),
+      { c: [0.025, 0.035], axialClr: [0.04, 0.06] });
+    const p0 = G.derive(P), r0 = G.operatingPoint(p0, G.analyse(p0, { samples: 12 }), 1500, 50);
+    check(S, `Pump interval contains the nominal point: η vol ${(100 * iv.etaV[0]).toFixed(1)}…${(100 * iv.etaV[1]).toFixed(1)} %, η hm ${(100 * iv.etaM[0]).toFixed(2)}…${(100 * iv.etaM[1]).toFixed(2)} %`,
+      iv.etaV[0] <= r0.etaV && r0.etaV <= iv.etaV[1] && iv.etaM[0] <= r0.etaM && r0.etaM <= iv.etaM[1] && iv.networkRuns === 10 && iv.analyses === 5);
+    let threw = false;
+    try { const p = G.derive(Object.assign({}, P, { shaftVent: undefined })); G.simulateNetwork(p, G.analyse(p, { samples: 8 }), new Array(8 * 7).fill(0), new Array(8 * 7).fill(0)); } catch (err) { threw = /shaftVent/.test(err.message); }
+    check(S, 'Leakage on: missing shaftVent is an error (no silent default)', threw);
+  }
+
   function runAll(only) {      // only: optional array of suite function names (quick runs)
     results.length = 0;
     const t0 = performance.now();
-    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica, suiteDrawingStep, suiteProject, suiteCriteria, suiteCriteriaFiles, suiteAssistProvenance, suiteNumInput].filter(f => !only || only.includes(f.name))) {
+    for (const s of [suiteConsistency, suiteDisplacement, suiteRipple, suiteClosedForm, suitePorts, suiteExport, suiteAssist, suiteLeakage, suiteBacklash, suiteContact, suiteFillet, suiteFriction, suitePerfMap, suiteReverse, suiteFluidSpectrum, suiteGrooves, suiteMaxSpeed, suiteGds, suiteUserOil, suiteGdsResults, suitePorting, suiteModelica, suiteDrawingStep, suiteProject, suiteCriteria, suiteCriteriaFiles, suiteAssistProvenance, suiteNumInput, suiteTolerance].filter(f => !only || only.includes(f.name))) {
       try { s(); } catch (e) { check(s.name, 'Suite threw: ' + e.message, false); }
     }
     return { results: results.slice(), ms: performance.now() - t0 };

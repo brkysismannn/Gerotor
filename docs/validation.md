@@ -529,3 +529,31 @@ for 11 of 12 parts (3/4 part has truncated "flat to tip" tips).
 
 Expected deviations are listed as explicit sets in the test (a new or vanishing deviation fails).
 Not checkable: displacement of all orbit motors (no profile data), Danfoss H/S (width only), Buhler (no speed).
+
+## 29. Clearance tolerance intervals and loss-model registry fixes (2026-10-31, design-sim-engineer)
+
+Source: loss-model inventory `company/reports/2026-10-31-design-sim-engineer-loss-model-inventory.md` §4/§6.
+Method, inputs and evidence: `docs/tolerance.md`. Tests: `backend/tests/test_tolerance.py` (26 tests) and frontend
+suite `29 · Clearance tolerance intervals` (7 checks).
+
+| Change / test | Result |
+|---|---|
+| `shaftVent` has no default when leakOn: core InvalidDesignError, JS error, API NOT EVALUATED | pass |
+| Periphery / unvented bore node = mean chamber pressure: named **A-D9 PERIPHERY_SEALED**, derived from the node mass balance with equal conductances (`docs/lumped-model.md`) | registry + test |
+| `leakage` registry entry lists A-D3, A-D8b, A-D9 | pass |
+| Density expansion 6.5e-4 1/K removed → user input `fluid.rhoExp`; absent → ρ not corrected + check row "density temperature correction NOT EVALUATED" (Python and JS) | pass |
+| User-oil 5 % rms warning limit removed → rms deviation reported as information | pass |
+| Guards `RHO_EQ_INV_MIN`, `PRESSURE_BRACKET_PA`, `BRACKET_DOUBLINGS`, eps bound, V guard: justification in `docs/convergence.md` "Guards" | doc |
+| η_v labelled: includes leakage, compressibility and incomplete filling (`etaVBasis`, UI tooltip, report note) | pass |
+| Monotonicity, each clearance alone, 3 designs × 2 points (backlash tip gap): η_v ↓ in c, axialClr; η_hm ↑ in axialClr, odClr, jbClr | pass (all) |
+| Monotonicity of η_hm in c | **fails** (n7, n9: shallow interior minimum) → c uses a 5-point grid + parabolic refinement, not corners |
+| Parabolic refinement exact for a quadratic; band ends exact for a monotone function; bad bands rejected (422) | pass |
+| Interval Python == JS (n7, bands on c, axialClr, odClr) | rel. 1e-9, 10 network runs / 5 analyses |
+| API interval contains the nominal η_v, η_hm, η | pass |
+| GRID_LEVELS 5 vs 17 | η_hm min within 4.4e-5 (docs/tolerance.md) |
+
+Run 2026-11-01: backend `python -m pytest -q` **633 pass · 0 fail** (7.9 min); frontend suite in V8 **390 pass · 2 fail
+(environment only: DOMParser / TextDecoder) · 3 known** (395). Real-browser run of the new UI panel not done.
+
+Not done: a pure-leakage η_v (it needs a second network run per point with compressibility removed, which doubles the
+cost); clearance deformation under pressure; temperature coupling in the gaps.

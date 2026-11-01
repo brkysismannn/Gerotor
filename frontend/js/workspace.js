@@ -251,13 +251,30 @@
     for (const k of ['rpm', 'dp', 'oilT', 'pIn']) raw[k] = c[k];
     if (Number.isFinite(c.nu) && c.nu > 0) raw.nu = c.nu;           // op-point viscosity overrides the oil model
     else if (raw.oil !== 'custom') {
-      const oil = raw.oil === 'user' ? G.userOil(raw, raw.oilT) : G.oilProperties(raw.oil, raw.oilT);
-      if (oil && Number.isFinite(oil.nu) && oil.nu > 0) { raw.nu = oil.nu; raw.rho = oil.rho; }
+      const oil = raw.oil === 'user' ? G.userOil(raw, raw.oilT) : G.oilProperties(raw.oil, raw.oilT, raw.rhoExp);
+      if (oil && Number.isFinite(oil.nu) && oil.nu > 0) { raw.nu = oil.nu; if (Number.isFinite(oil.rho)) raw.rho = oil.rho; }
     }
     return raw;
   }
+  // ---- clearance tolerance bands (settings.clearanceTolerance, js/tolerance.js)
+  function syncTolForm() {
+    const TOL_KEYS = G.tolerance.KEYS;
+    const f = $('tolForm'); if (!f) return;
+    const t = (settings && settings.clearanceTolerance) || {};
+    for (const k of TOL_KEYS) for (const e of ['min', 'max']) f.elements[k + '_' + e].value = t[k] ? t[k][e] : '';
+  }
+  if ($('tolForm')) $('tolForm').addEventListener('change', () => {
+    const f = $('tolForm'), t = {};
+    for (const k of G.tolerance.KEYS) {
+      const lo = G.num.parse(f.elements[k + '_min'].value), hi = G.num.parse(f.elements[k + '_max'].value);
+      if (Number.isFinite(lo) && Number.isFinite(hi)) t[k] = { min: lo, max: hi };
+    }
+    if (Object.keys(t).length) settings.clearanceTolerance = t; else delete settings.clearanceTolerance;
+    lastCaseResults = null; touch('tol');
+  });
   function calcCases() {
     const out = [];
+    const tol = settings && settings.clearanceTolerance;
     for (const c of cases) {
       let r;
       try {
@@ -267,6 +284,9 @@
           flow: ok ? (pr && pr.sim ? pr.flowLpm : res.flowLpm) : NaN, etaV: ok && pr && pr.sim ? pr.portEfficiency * 100 : NaN,
           etaT: ok && res.mech ? res.mech.etaT * 100 : NaN, hertz: ok && res.contact ? res.contact.pmaxMax / 1e6 : NaN,
           torque: ok && res.mech ? res.mech.Mshaft : NaN, power: ok && res.mech ? res.mech.powerIn / 1000 : NaN };
+        if (ok && tol && Object.keys(tol).length) {
+          try { r.tol = G.tolerance.caseInterval(caseRaw(c), tol); } catch (e) { r.tolError = e.message; }
+        }
       } catch (e) { r = { name: c.name, rpm: c.rpm, dp: c.dp, oilT: c.oilT, status: 'INVALID', flow: NaN, etaV: NaN, etaT: NaN, hertz: NaN, torque: NaN, power: NaN, error: e.message, run: { name: c.name, rpm: c.rpm, params: null, res: null } }; }
       out.push(r);
     }
@@ -274,8 +294,12 @@
   }
   function renderCaseResults() {
     const r = lastCaseResults;
-    $('caseResGrid').innerHTML = r ? '<thead><tr><th>Case</th><th>rpm</th><th>Δp bar</th><th>Oil T °C</th><th>Flow L/min</th><th>η vol %</th><th>η total %</th><th>Shaft torque N·m</th><th>Input kW</th><th>Hertz MPa</th><th>Status</th></tr></thead><tbody>' +
-      r.map(x => `<tr class="${x.status === 'INVALID' ? 'bad' : ''}"><td>${esc(x.name)}</td><td class="n">${esc(x.rpm)}</td><td class="n">${esc(x.dp)}</td><td class="n">${esc(x.oilT)}</td><td class="n">${fn(x.flow, 2)}</td><td class="n">${fn(x.etaV, 1)}</td><td class="n">${fn(x.etaT, 1)}</td><td class="n">${fn(x.torque, 2)}</td><td class="n">${fn(x.power, 3)}</td><td class="n">${fn(x.hertz, 0)}</td><td>${esc(x.status)}</td></tr>`).join('') + '</tbody>'
+    const anyTol = !!(r && r.some(x => x.tol || x.tolError));
+    const iv = (x, k) => x.tol ? `${fn(100 * x.tol[k][0], 1)} … ${fn(100 * x.tol[k][1], 1)}` : esc(x.tolError || '-');
+    const tolHead = anyTol ? '<th>η vol % (tolerance)</th><th>η hm % (tolerance)</th><th>η % (tolerance, enclosure)</th>' : '';
+    const tolCells = x => anyTol ? `<td class="n">${iv(x, 'etaV')}</td><td class="n">${iv(x, 'etaM')}</td><td class="n">${iv(x, 'etaT')}</td>` : '';
+    $('caseResGrid').innerHTML = r ? '<thead><tr><th>Case</th><th>rpm</th><th>Δp bar</th><th>Oil T °C</th><th>Flow L/min</th><th title="Q_out / Q_th of the chamber network: includes leakage, compressibility and incomplete filling">η vol %</th><th>η total %</th>' + tolHead + '<th>Shaft torque N·m</th><th>Input kW</th><th>Hertz MPa</th><th>Status</th></tr></thead><tbody>' +
+      r.map(x => `<tr class="${x.status === 'INVALID' ? 'bad' : ''}"><td>${esc(x.name)}</td><td class="n">${esc(x.rpm)}</td><td class="n">${esc(x.dp)}</td><td class="n">${esc(x.oilT)}</td><td class="n">${fn(x.flow, 2)}</td><td class="n">${fn(x.etaV, 1)}</td><td class="n">${fn(x.etaT, 1)}</td>${tolCells(x)}<td class="n">${fn(x.torque, 2)}</td><td class="n">${fn(x.power, 3)}</td><td class="n">${fn(x.hertz, 0)}</td><td>${esc(x.status)}</td></tr>`).join('') + '</tbody>'
       : '<tbody><tr><td>Not calculated. Use Calculation > Calculate all load cases.</td></tr></tbody>';
   }
   function runCases() {
@@ -353,6 +377,7 @@
     applying = true;
     meta = st.meta; cases = st.loadCases; active = st.activeCase; calcMode = st.calcMode; settings = st.settings;
     if (!G.Calc.setMode(calcMode)) calcMode = G.Calc.mode;
+    syncTolForm();
     const c = cases[active] || {};
     A.setDesign(Object.assign({}, st.design, ['rpm', 'dp', 'oilT', 'pIn'].reduce((o, k) => (Number.isFinite(c[k]) && (o[k] = c[k]), o), {})));
     syncMetaForm(); renderCaseList(); lastCaseResults = null; renderCaseResults(); lastEval = null;
@@ -414,6 +439,7 @@
     if (!snap) return;
     applying = true;
     meta = snap.meta; cases = snap.loadCases; active = snap.activeCase; calcMode = snap.calcMode; settings = snap.settings;
+    syncTolForm();
     A.setDesign(snap.design); syncMetaForm(); renderCaseList(); lastEval = null;
     applying = false; updateChrome(); refreshStatus(A.getState());
   }

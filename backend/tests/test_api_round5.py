@@ -60,7 +60,8 @@ def test_missing_material_not_evaluated():
     assert out["contact"] is None and out["friction"] is None and out["operating"] is None
     assert "Ein" in out["notEvaluated"]["contact"]
     miss = [c for c in out["checks"] if c["level"] == "missing"]
-    assert {c["module"] for c in miss} == {"contact", "friction", "operating"}
+    # "fluid": the example load case at oilT has no rhoExp (density not temperature-corrected, 2026-10-31)
+    assert {c["module"] for c in miss} == {"contact", "friction", "operating", "fluid"}
     assert out["certification"]["status"] == "NOT FOR CERTIFICATION"
 
 

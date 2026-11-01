@@ -160,8 +160,10 @@ def test_audit_r01_r02_r04_r06():
     assert callable(C.neutralize_checks) and report.methods()  # R04: registry functions resolve
     out = to_json({"a": list(range(65)), "b": np.zeros(3), "c": 1}, arrays=False)  # R06
     assert out["c"] == 1 and {o["key"]: o["length"] for o in out["_omitted"]} == {"a": 65, "b": 3}
-    src = [x for x in methods.METHODS["fluid"]["sources"] if "6.5e-4" in x["ref"]]
-    assert src and src[0]["kind"] == "unsourced"  # R02
+    # R02 resolved 2026-10-31: the unsourced 6.5e-4 1/K is removed; rhoExp is a user input (no default)
+    src = [x for x in methods.METHODS["fluid"]["sources"] if "rhoExp" in x["use"]]
+    assert src and src[0]["kind"] == "user input"
+    assert not [x for x in methods.METHODS["fluid"]["sources"] if x["kind"] == "unsourced" and "6.5e-4" in x["ref"]]
     p, res = {"fillS": 2}, {"cc": 16.0, "ports": {"suction": {"area": 500.0}}}
     ms = calc.inlet_rpm_from_criteria({"rpmInlet": 1.0}, p, res, None)  # R01
     assert ms["rpmInlet"] is None and "NOT EVALUATED" in ms["rpmInletBasis"]

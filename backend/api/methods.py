@@ -17,7 +17,7 @@ test vector reproduced by a test), "unverified" (attributed source not checked),
 from __future__ import annotations
 
 from . import criteria as _criteria
-from gerotor_core import backlash, contact, fluid, friction, geometry, leakage, perfmap, ports, reverse, spectrum
+from gerotor_core import backlash, contact, fluid, friction, geometry, leakage, perfmap, ports, reverse, spectrum, tolerance
 
 IVANOVIC = "Ivanovic et al. 2012"
 RUNDO = "Rundo 2017"
@@ -101,8 +101,12 @@ METHODS = {
                     _s(KIM, "literature", "chamber pressure model"),
                     _s("Reynolds equation, laminar Poiseuille gap flow (docs/lumped-model.md)", "derivation",
                        "gap conductances; Couette flow not modelled"),
-                    USER("nu, axialClr, shaftVent (leakOn)"), NUMERICS],
-        "assumptions": [],
+                    _s("periphery / unvented bore node mass balance sum_k G (p_k - p_node) = 0 with equal G "
+                       "(docs/lumped-model.md)", "derivation", "p_node = mean chamber pressure (A-D9)"),
+                    _s("docs/convergence.md 'Guards' (bracket and division guards)", "derivation",
+                       "RHO_EQ_INV_MIN, PRESSURE_BRACKET_PA, BRACKET_DOUBLINGS do not change a converged result"),
+                    USER("nu, axialClr, shaftVent (leakOn; no default)"), NUMERICS],
+        "assumptions": ["A-D3", "A-D8b", "A-D9"],
     },
     "contact": {
         "module": contact, "functions": ("compute_contact",),
@@ -157,7 +161,8 @@ METHODS = {
     "operating": {
         "module": perfmap, "functions": ("operating_point",),
         "method": "Operating point: network, pressure torque and friction re-evaluated per load case",
-        "equations": ["Q_out from the chamber network; eta_v = Q_out / Q_th",
+        "equations": ["Q_out from the chamber network; eta_v = Q_out / Q_th (includes leakage, compressibility and "
+                      "incomplete filling - not a pure leakage efficiency)",
                       "M_shaft per friction model; eta_m = M_th / M_shaft"],
         "sources": [_s(RUNDO, "literature", "chamber network"),
                     _s(TOTARO, "literature", "shaft torque")],
@@ -167,14 +172,17 @@ METHODS = {
         "module": fluid, "functions": (),
         "method": "Oil viscosity and density vs temperature",
         "equations": ["log10(log10(nu + 0.7)) = A - B log10(T[K]) (nu >= 2 cSt)",
-                      "rho(T) = rho15 (1 - 6.5e-4 (T - 15))"],
+                      "rho(T) = rho15 (1 - alpha (T - 15)), alpha = rhoExp [1/K] user input"],
         "sources": [_s("ASTM D341 (Ubbelohde-Walther)", "standard", "viscosity-temperature relation"),
                     _s("ISO 3448 viscosity grades (clause not verified)", "standard", "ISO VG nu40 = grade midpoint"),
                     _s("OILS nu100, rho15 and all non-ISO-VG rows (fluid.OILS source tags)", "unsourced",
                        "using a library oil marks the report NOT FOR CERTIFICATION until "
                        "References/Oil-Datasheets/sources.md cites it (fluid.load_sources)"),
-                    _s("UNEXPLAINED: linear thermal expansion coefficient 6.5e-4 1/K has no documented source or "
-                      "derivation yet (audit R02)", "unsourced", "density")],
+                    USER("rhoExp [1/K] thermal expansion coefficient (former unsourced 6.5e-4 removed, audit R02); "
+                         "absent -> density not temperature-corrected, check row 'density temperature correction "
+                         "NOT EVALUATED'"),
+                    _s("user-oil Walther fit rms deviation reported as information (former 5 % warning limit had "
+                       "no source)", "derivation", "rms of nu_fit/nu - 1 over the datasheet points")],
         "assumptions": [],
     },
     "reverse": {
@@ -186,6 +194,20 @@ METHODS = {
                     _s("closed-form inversion of the profile diameters (in-house)", "derivation", "equations")],
         "assumptions": ["A-D3"],
     },
+}
+
+METHODS["tolerance"] = {
+    "module": tolerance, "functions": ("check_bands", "interval"),
+    "method": "Clearance tolerance -> intervals of eta_v, eta_hm and eta per load case",
+    "equations": ["monotone axis (axialClr, odClr, jbClr): extreme at the band ends -> vertex enumeration, exact",
+                  "non-monotone axis (c: eta_hm has an interior minimum): GRID_LEVELS uniform points + parabola vertex "
+                  "f1 - (f2 - f0)^2 / (8 (f0 - 2 f1 + f2)) at interior extrema",
+                  "eta enclosure [min eta_v min eta_hm, max eta_v max eta_hm] (eta_v, eta_hm > 0)"],
+    "sources": [_s("docs/tolerance.md (monotonicity sweeps, 3 designs x 3 operating points x 4 clearances; "
+                   "tests/test_tolerance.py)", "derivation", "axis classification and interval method"),
+                _s("docs/tolerance.md grid study 3/5/9/17 levels", "numerical-justified", "GRID_LEVELS = 5"),
+                USER("settings.clearanceTolerance {c, axialClr, odClr, jbClr: {min, max}} (no default band)")],
+    "assumptions": ["A-D3", "A-D5"],
 }
 
 METHODS["acceptance"] = {
@@ -251,6 +273,12 @@ ASSUMPTION_REGISTRY = {
               "statement": "rho_eq capped at 1e4 mm; Hertz validity a/rho reported, not enforced.",
               "variants": {}, "sources": [_s(JOHNSON, "literature", "Hertz line contact, validity a << rho"),
                                           _s(CONVERGENCE, "numerical-justified", "cap sensitivity 1e3-1e5 mm")]},
+    "A-D9": {"name": "PERIPHERY_SEALED", "switch": None,
+             "statement": "Outer-rotor periphery (and unvented bore) is a massless, sealed node joined to every chamber "
+                          "by the same face conductance, so its pressure is the mean chamber pressure.",
+             "variants": {},
+             "sources": [_s("mass balance sum_k G (p_k - p_node) = 0, G equal for all k (sector 2 pi/N); "
+                            "docs/lumped-model.md", "derivation", "p_node = mean_k p_k")]},
     "A-AC1": {"name": "HERTZ_GEAR_ANALOGY", "switch": None,
               "statement": "Gerotor 2-D Hertz peak pressure is compared with a gear contact limit stress "
                            "(ISO 6336-5 style allowable = sigma_Hlim / S). Modelling analogy: ISO 6336 covers "

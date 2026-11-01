@@ -27,17 +27,26 @@ Units below are SI. Geometry functions of the rotor angle come from `js/geometry
 | `FaceGapBore` (2 faces) | chamber ↔ bore | q = G·Δp, G = 2·(2π/N)·h_ax³ / (12·μ·ln(r_root/r_bore)) |
 | `FaceGapPeriphery` (2 faces) | chamber ↔ periphery | q = G·Δp, G = 2·(2π/N)·h_ax³ / (12·μ·ln(r_OD/R_v)) |
 | `PortLand` (2 lands, 1 or 2 faces) | delivery ↔ suction | q = Σ w·h_ax³ / (12·μ·L_land)·Δp, w = R_port,o − R_port,i, L_land = Δθ_land·r_mid |
-| `PeripheryNode` | massless | Σq = 0 |
-| `BoreNode` | boundary | p = p_in if vented, else massless node |
+| `PeripheryNode` | massless, sealed (A-D9) | Σq = 0 → p_per = mean_k p_k (derivation below) |
+| `BoreNode` | boundary | p = p_in if vented, else massless node as the periphery; `shaftVent` is a user input when leakage is on (no default; missing → InvalidDesignError / NOT EVALUATED) |
 | Boundaries | suction, delivery | p_s = p_in, p_d = p_in + Δp |
 
 ρ_eq is the equivalent radius at the contact between the convex lobe (r_p) and the inner profile
 (signed radius ρ_t − r_p, ρ_t = trochoid radius of curvature): 1/ρ_eq = 1/r_p + 1/(ρ_t − r_p).
 The tip-gap equation is the exact integral of Reynolds' equation for h(x) = h + x²/(2ρ_eq).
 
+**Periphery node pressure (assumption A-D9 PERIPHERY_SEALED, derivation).** The periphery (and the unvented
+bore) is modelled as a node without volume and without any other outlet. Every chamber k is joined to it by
+the same face conductance G = n_faces (2π/N) h_ax³ / (12 μ ln(r2/r1)), because every chamber spans the same
+sector angle 2π/N. Mass balance of the node: Σ_k G (p_k − p_node) = 0 ⇒ p_node = (1/N) Σ_k p_k. The mean is
+therefore exact for this topology. It fails if the periphery is drained (case drain) or if its volume is not
+small against the chamber volumes (then the node needs its own V/K dp/dt).
+
 ## Outputs
 
-- Delivered flow Q_out = −Σ_k q_d,k − q_land; volumetric efficiency η_v = mean(Q_out) / (V_disp·n/60)
+- Delivered flow Q_out = −Σ_k q_d,k − q_land; volumetric efficiency η_v = mean(Q_out) / (V_disp·n/60) — this η_v
+  includes internal leakage **and** fluid compressibility and incomplete filling (void); it is not a pure leakage
+  efficiency (API rows carry `etaVBasis`). Tolerance intervals: `docs/tolerance.md`.
 - Chamber pressure history, peak/min pressure, void fraction (cavitation / incomplete filling)
 - Leak flows by path (tip gross circulation, bore drain, lands)
 

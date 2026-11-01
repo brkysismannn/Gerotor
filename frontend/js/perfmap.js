@@ -12,7 +12,9 @@
 
   const linspace = (a, b, n) => n <= 1 ? [a] : Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
 
-  function operatingPoint(p0, res, rpm, dp) {
+  // mechDesigns (optional): designs that differ only in friction inputs (odClr, jbClr); their etaM is
+  // returned in mechEtaM with the same network / contact result (js/tolerance.js).
+  function operatingPoint(p0, res, rpm, dp, mechDesigns) {
     const p = Object.assign({}, p0, { rpm, dp, simSub: p0.simSub || 6 });
     const qTheo = res.cc * 1e-6 * rpm / 60;
     const r = Object.assign({}, res, { ports: null, contact: null });
@@ -33,7 +35,9 @@
     }
     if (dp > 0) r.contact = G.computeContact(p, r, { quasiStatic: !r.ports });
     const mech = G.computeMechanical(p, r);
+    const extra = mechDesigns ? { mechEtaM: mechDesigns.map(q => G.computeMechanical(Object.assign({}, q, { rpm, dp, simSub: p.simSub }), r).etaM) } : {};
     return {
+      ...extra,
       rpm, dp,
       flowLpm: etaV * qTheo * 6e4,
       etaV, etaM: mech.etaM, etaT: mech.etaT,

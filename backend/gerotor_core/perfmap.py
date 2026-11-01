@@ -20,7 +20,10 @@ def _linspace(a, b, n):
     return [a] if n <= 1 else [a + (b - a) * i / (n - 1) for i in range(n)]
 
 
-def operating_point(p0, res, rpm, dp) -> dict:
+def operating_point(p0, res, rpm, dp, mech_designs=None) -> dict:
+    """One operating point. ``mech_designs`` (optional): further design dicts that differ only in
+    friction inputs (odClr, jbClr); their eta_m is returned in ``mechEtaM`` using the same network and
+    contact result (tolerance intervals, gerotor_core.tolerance)."""
     require_analysis(res, "operating_point", ("cc", "ripple"))
     p = dict(p0, rpm=rpm, dp=dp, simSub=p0.get("simSub") or NET_SUB_DEFAULT)
     qTheo = res["cc"] * 1e-6 * rpm / 60
@@ -43,7 +46,12 @@ def operating_point(p0, res, rpm, dp) -> dict:
         r["contact"] = compute_contact(p, r, quasi_static=not r["ports"])
     mech = compute_mechanical(p, r)
     ct = r["contact"]
+    extra = {}
+    if mech_designs is not None:
+        extra["mechEtaM"] = [compute_mechanical(dict(q, rpm=rpm, dp=dp, simSub=p["simSub"]), r)["etaM"]
+                             for q in mech_designs]
     return {
+        **extra,
         "rpm": rpm, "dp": dp, "flowLpm": etaV * qTheo * 6e4,
         "etaV": etaV, "etaM": mech["etaM"], "etaT": mech["etaT"],
         "torque": mech["Mshaft"], "powerIn": mech["powerIn"], "powerOut": mech["powerOut"],

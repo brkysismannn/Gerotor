@@ -11,7 +11,12 @@ and the Modelica export):
     Axial face gap     radial Poiseuille across an annular sector of angle theta:
                            Q = theta h^3 dp / (12 mu ln(r2/r1))
     Port land          slot flow  Q = w h^3 dp / (12 mu L)
-    Periphery node     massless; pressure = mean of chamber pressures.
+    Periphery node     massless, sealed (assumption A-D9 PERIPHERY_SEALED); every chamber is joined to it
+                       by the same conductance G_per (sector angle 2 pi/N), so its mass balance
+                       sum_k G_per (p_k - p_per) = 0 gives p_per = mean_k p_k exactly (derivation,
+                       docs/lumped-model.md). The unvented bore node follows the same rule.
+    Bore node          vented to the inlet (p = pIn) or massless as above: ``shaftVent`` is a user
+                       input when leakOn (no default; missing -> InvalidDesignError / NOT EVALUATED).
 
 Not modelled: Couette flow in the gaps, face leakage across tooth lands, outer-rotor micro-motion.
 """
@@ -21,6 +26,7 @@ import math
 
 import numpy as np
 
+from .errors import require_design
 from .friction import single_sided
 from .geometry import TAU, trochoid_curvature_radius
 
@@ -43,6 +49,15 @@ def slot_conductance(w, h, mu, L):
 
 
 RHO_EQ_CAP_MM = 1e4
+# Guard (derivation, docs/convergence.md "Guards"): 1/rho_eq <= RHO_EQ_INV_MIN [1/mm] means
+# rho_eq >= 1e6 mm > RHO_EQ_CAP_MM, so returning the cap there is the same value min(1/inv, cap)
+# would give; the guard only avoids the division by ~0 and never changes a result.
+RHO_EQ_INV_MIN = 1e-6
+# Root bracket of the implicit chamber-pressure equation F(x) = 0 (F strictly increasing in x):
+# start at max(p_old, pD, pS) + PRESSURE_BRACKET_PA, double up to BRACKET_DOUBLINGS times until
+# F(hi) >= 0. Bracket only - the converged root does not depend on it (docs/convergence.md "Guards").
+PRESSURE_BRACKET_PA = 1e5
+BRACKET_DOUBLINGS = 60
 
 # Numerical settings (values = JS tool; convergence evidence: docs/convergence.md).
 NET_SUB_DEFAULT = 6   # N08 network sub-steps per grid step (if design simSub absent)
@@ -71,7 +86,7 @@ def contact_rho_eq(p, phi, cap: float | None = None) -> float:
     rt = trochoid_curvature_radius(p, phi)
     ri = rt - p["rp"]
     inv = 1 / p["rp"] + 1 / ri
-    return min(1 / inv, cap) if inv > 1e-6 else cap
+    return min(1 / inv, cap) if inv > RHO_EQ_INV_MIN else cap
 
 
 def orifice(A, p_up, p_ch, Cd, rho):
@@ -122,7 +137,9 @@ def simulate_network(p, res, As, Ad, ports=None) -> dict:
     Gbore = nFaces * sector_conductance(theta, hAx, mu, p["bore"] / 2 * 1e-3, p["innerRoot"] * 1e-3) \
         if (hAx > 0 and p["bore"] > 0) else 0.0
     Gper = nFaces * sector_conductance(theta, hAx, mu, p["Rv"] * 1e-3, p["OD"] / 2 * 1e-3) if hAx > 0 else 0.0
-    boreVented = p.get("shaftVent") is not False
+    if leak:  # user input, no default (owner rule no-unexplained-numbers)
+        require_design(p, "simulate_network (leakOn: bore vent)", ("shaftVent",))
+    boreVented = bool(p.get("shaftVent")) if leak else True  # leak off: Gbore = 0, node unused
     Gland = 0.0
     if hAx > 0 and ports and ports.get("suction"):
         ri = max(p["portRi"], 0)
@@ -198,8 +215,8 @@ def simulate_network(p, res, As, Ad, ports=None) -> dict:
                             if sw == sweeps - 1:
                                 voids[k] = max(0.0, (dV - Qin(pV)) * h)
                             continue
-                        lo, hi = pV, max(po, pD, pS) + 1e5
-                        for _ in range(60):
+                        lo, hi = pV, max(po, pD, pS) + PRESSURE_BRACKET_PA
+                        for _ in range(BRACKET_DOUBLINGS):
                             if not (F(hi) < 0):
                                 break
                             hi *= 2

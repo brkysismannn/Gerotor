@@ -19,7 +19,9 @@
  *                         chamber → outer-rotor periphery node.
  *   Port land             slot flow delivery → suction across the two port lands:
  *                           Q = w·h³·Δp / (12·μ·L)
- *   Periphery node        massless; pressure = conductance-weighted mean of chambers.
+ *   Periphery node        massless, sealed (A-D9): equal conductances to every chamber, so the
+ *                         mass balance gives pressure = mean of the chamber pressures exactly.
+ *   Bore node             vented (p = pIn) or massless as above; shaftVent is a user input (no default).
  *
  * Not modelled (yet): Couette (shear-driven) flow in the gaps, inter-chamber face
  * leakage across tooth lands, radial micro-motion of the outer rotor.
@@ -85,7 +87,9 @@
     const theta = TAU / N;
     const Gbore = hAx > 0 && p.bore > 0 ? nFaces * sectorConductance(theta, hAx, mu, p.bore / 2 * 1e-3, p.innerRoot * 1e-3) : 0;
     const Gper = hAx > 0 ? nFaces * sectorConductance(theta, hAx, mu, p.Rv * 1e-3, p.OD / 2 * 1e-3) : 0;
-    const boreVented = p.shaftVent !== false;
+    // shaftVent is a user input when leakage is on (no default, as gerotor_core.leakage).
+    if (leak && (p.shaftVent === undefined || p.shaftVent === null)) throw new Error('simulate_network (leakOn: bore vent): design is missing shaftVent');
+    const boreVented = leak ? !!p.shaftVent : true;
     // Port lands: on every face that carries the delivery port.
     let Gland = 0;
     if (hAx > 0 && ports && ports.suction) {

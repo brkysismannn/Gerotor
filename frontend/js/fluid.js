@@ -62,12 +62,14 @@
 
   const waltherFit = (nu40, nu100) => waltherFitPoints([[40, nu40], [100, nu100]]);
   const viscosityAt = (nu40, nu100, tC) => viscosityFromFit(waltherFit(nu40, nu100), tC);
-  const densityAt = (rho15, tC) => rho15 * (1 - 6.5e-4 * (tC - 15));
+  // Linear expansion; alpha [1/K] = user input rhoExp (no default, the former 6.5e-4 had no source).
+  // Missing alpha -> NaN (density not temperature-corrected; callers keep the user rho).
+  const densityAt = (rho15, tC, alpha) => (Number.isFinite(alpha) && Number.isFinite(rho15)) ? rho15 * (1 - alpha * (tC - 15)) : NaN;
 
-  function oilProperties(key, tC) {
+  function oilProperties(key, tC, alpha) {
     const o = OILS[key];
     if (!o) return null;
-    return { nu: viscosityAt(o.nu40, o.nu100, tC), rho: densityAt(o.rho15, tC), label: o.label, fit: waltherFit(o.nu40, o.nu100) };
+    return { nu: viscosityAt(o.nu40, o.nu100, tC), rho: densityAt(o.rho15, tC, alpha), label: o.label, fit: waltherFit(o.nu40, o.nu100) };
   }
 
   /*
@@ -84,9 +86,10 @@
     const notes = [];
     if (tC < fit.tMin - 1e-9 || tC > fit.tMax + 1e-9) notes.push(`extrapolated outside the datasheet range ${fit.tMin}…${fit.tMax} °C`);
     if (nu < NU_MIN) notes.push(`ν < ${NU_MIN} cSt: outside the ASTM D341 (0.7) range`);
-    if (fit.n > 2 && fit.rms > 0.05) notes.push(`datasheet points deviate ${(100 * fit.rms).toFixed(0)} % rms from one Walther line`);
+    if (fit.n > 2) notes.push(`datasheet points deviate ${(100 * fit.rms).toFixed(1)} % rms from one Walther line`);  // information only
     if (!(fit.B > 0)) notes.push('viscosity does not fall with temperature — check the inputs');
-    return { nu, rho: densityAt(p.uRho15, tC), fit, notes, points: pts };
+    if (!Number.isFinite(p.rhoExp)) notes.push('density not temperature-corrected: thermal expansion coefficient rhoExp not entered');
+    return { nu, rho: densityAt(p.uRho15, tC, p.rhoExp), fit, notes, points: pts };
   }
 
   Object.assign(G, { OILS, viscosityAt, densityAt, oilProperties, waltherFit, waltherFitPoints, viscosityFromFit, userOil, NU_MIN });

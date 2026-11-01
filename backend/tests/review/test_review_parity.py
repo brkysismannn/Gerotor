@@ -9,7 +9,7 @@ from gerotor_core import geometry, ports, perfmap, spectrum
 _ROOT = pathlib.Path(__file__).resolve().parents[3]
 JS = next((d for d in (_ROOT / "frontend" / "js", _ROOT / "js") if d.is_dir()), _ROOT / "frontend" / "js")
 FILES = ["geometry.js", "backlash.js", "leakage.js", "contact.js", "friction.js", "fluid.js",
-         "ports.js", "spectrum.js", "reverse.js", "perfmap.js",
+         "ports.js", "spectrum.js", "reverse.js", "perfmap.js", "tolerance.js",
          "criteria.generated.js", "criteria.js"]  # criteria: JS check rows are neutralised (NOT EVALUATED)
 BASE = dict(c=0, RvAuto=True, RvClear=0.1, bore=0, rpm=1000, dp=10, portsOn=False, portRoAuto=True, portRiAuto=True,
             sucStart=0, sucEnd=0, delStart=0, delEnd=0, gSucStart=0, gSucEnd=0, gDelStart=0, gDelEnd=0, grooveW=1,

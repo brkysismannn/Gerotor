@@ -79,3 +79,15 @@ Convergence check (V8, default requirements; best verified result; N = winning l
 | | step/2 | 10 | 1.9933 | 5.4917 | 123.8 MPa |
 
 Result: the winning lobe count never changes. The objective changes by up to 3 % (ripple, grid x4), 0.05 % (outer diameter) and 2.5 % (contact stress) when the grid or steps are refined, because the optimum lies on a flat ridge against the packaging limit. Step, stop and seed settings do not change the result except in the contact case (step/2). So the defaults are adequate for ranking and for choosing N; the lambda and k of the winner are only good to about +-0.1 and +-0.3. The test `27 · Design Assist` asserts N unchanged and objective within 5 % for a doubled grid. If a tighter optimum is needed, pass `search: { nLam: 56, nK: 48 }` (about 2.5x run time).
+
+## Guards (bracket and division guards, added 2026-10-31)
+
+These constants protect a bisection bracket or a division. Each note shows why the value does not change a result
+(derivation), so no convergence study is needed. Code: `gerotor_core/leakage.py`, `gerotor_core/friction.py`, JS mirror.
+
+| Constant | Where | Justification |
+|---|---|---|
+| `RHO_EQ_INV_MIN` = 1e-6 1/mm | `contact_rho_eq` | 1/rho_eq <= 1e-6 1/mm means rho_eq >= 1e6 mm, which is larger than the cap `RHO_EQ_CAP_MM` = 1e4 mm, so min(1/inv, cap) = cap there anyway. Negative inv (inner profile more conformal than the lobe) returns the cap as before (conformal limit, A-D8b). The guard is exact while cap <= 1/RHO_EQ_INV_MIN = 1e6 mm (a cap sensitivity run above 1e6 mm must lower the guard too). |
+| `PRESSURE_BRACKET_PA` = 1e5 Pa, `BRACKET_DOUBLINGS` = 60 | network chamber-pressure bisection | F(x) = V/K (x - p_old)/h - Q_in(x) + dV/dt is strictly increasing in x (every term of -Q_in rises with x). The upper bracket starts above every boundary pressure and is doubled until F(hi) >= 0; 2^60 x (p + 1e5) exceeds any finite root, so the bracket contains the root and the 50 bisections (N08 study) fix the result. The start offset only changes how many doublings are used. |
+| eps upper bound 1 - 1e-12 | `solve_eccentricity` | Ocvirk load W(eps) grows like (1 - eps^2)^-2 and is finite at 1 - 1e-12 in double precision; any load the film can carry has its root below it. A load that needs eps closer to 1 is a film thinner than 1e-12 c, outside the full-film model anyway. |
+| `max(V, 1e-18 m^3)` | void fraction | the smallest chamber volume of the reference / product designs is 4.3e-10 m^3 (Manco miniature, 0.43 mm^3), 8 orders larger; the guard acts only for V = 0 exactly. |

@@ -355,6 +355,11 @@
         "uRho15": {
           "$ref": "#/$defs/num",
           "x-unit": "kg/m^3"
+        },
+        "rhoExp": {
+          "$ref": "#/$defs/num",
+          "x-unit": "1/K",
+          "description": "linear thermal expansion coefficient of the oil (datasheet); absent = density not temperature-corrected (no default)"
         }
       }
     },
@@ -466,6 +471,17 @@
               "type": "number",
               "default": 10
             }
+          }
+        },
+        "clearanceTolerance": {
+          "description": "Clearance tolerance band per clearance key (same unit and convention as the design value; A-D3 / A-D5 apply). Each entry {min, max} with min <= nominal <= max. Result: eta_v, eta_hm, eta intervals by vertex enumeration (docs/tolerance.md).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "c": {"$ref": "#/$defs/tolBand"},
+            "axialClr": {"$ref": "#/$defs/tolBand"},
+            "odClr": {"$ref": "#/$defs/tolBand"},
+            "jbClr": {"$ref": "#/$defs/tolBand"}
           }
         },
         "variants": {
@@ -794,6 +810,12 @@
     }
   },
   "$defs": {
+    "tolBand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {"min": {"type": "number", "minimum": 0}, "max": {"type": "number", "minimum": 0}}
+    },
     "num": {
       "oneOf": [
         {

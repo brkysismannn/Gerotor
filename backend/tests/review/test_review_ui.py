@@ -12,7 +12,7 @@ _ROOT = pathlib.Path(__file__).resolve().parents[3]
 JS = _ROOT / "frontend" / "js"
 TESTS = _ROOT / "frontend" / "tests"
 # Non-DOM scripts of frontend/index.html in its load order (render/charts/app/*-ui/workspace need a DOM).
-FILES = ["numinput.js", "geometry.js", "ports.js", "backlash.js", "leakage.js", "contact.js", "friction.js", "perfmap.js",
+FILES = ["numinput.js", "geometry.js", "ports.js", "backlash.js", "leakage.js", "contact.js", "friction.js", "perfmap.js", "tolerance.js",
          "reverse.js", "fluid.js", "spectrum.js", "assist.js", "xlsx.js", "modelica.js", "drawing.js", "step.js",
          "export.js", "project.js", "methods.generated.js", "criteria.generated.js", "criteria.js", "report.js"]
 PRE = r"""var window=globalThis; var performance={now:()=>0};

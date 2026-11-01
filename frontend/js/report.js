@@ -327,9 +327,17 @@
       h.push(`</table>`);
     }
     if (opts.caseResults && opts.caseResults.length) {
-      h.push(`<h2>${sec++} Load case results</h2><table class="caseres"><tr><th>Case</th><th>rpm</th><th>Δp bar</th><th>Flow L/min</th><th>η vol %</th><th>η total %</th><th>Hertz MPa</th><th>Status</th></tr>`);
-      for (const r of opts.caseResults) h.push(`<tr><td>${esc(r.name)}</td><td class="n">${esc(r.rpm)}</td><td class="n">${esc(r.dp)}</td><td class="n">${fx(r.flow, 2)}</td><td class="n">${fx(r.etaV, 1)}</td><td class="n">${fx(r.etaT, 1)}</td><td class="n">${fx(r.hertz, 0)}</td><td>${esc(r.status)}</td></tr>`);
+      const anyTol = opts.caseResults.some(r => r.tol || r.tolError);
+      const iv = (r, k) => r.tol ? `${fx(100 * r.tol[k][0], 1)} … ${fx(100 * r.tol[k][1], 1)}` : esc(r.tolError || '-');
+      h.push(`<h2>${sec++} Load case results</h2><table class="caseres"><tr><th>Case</th><th>rpm</th><th>Δp bar</th><th>Flow L/min</th><th>η vol %</th><th>η total %</th>${anyTol ? '<th>η vol % (tolerance)</th><th>η hm % (tolerance)</th><th>η % (tolerance, enclosure)</th>' : ''}<th>Hertz MPa</th><th>Status</th></tr>`);
+      for (const r of opts.caseResults) h.push(`<tr><td>${esc(r.name)}</td><td class="n">${esc(r.rpm)}</td><td class="n">${esc(r.dp)}</td><td class="n">${fx(r.flow, 2)}</td><td class="n">${fx(r.etaV, 1)}</td><td class="n">${fx(r.etaT, 1)}</td>${anyTol ? `<td class="n">${iv(r, 'etaV')}</td><td class="n">${iv(r, 'etaM')}</td><td class="n">${iv(r, 'etaT')}</td>` : ''}<td class="n">${fx(r.hertz, 0)}</td><td>${esc(r.status)}</td></tr>`);
       h.push(`</table>`);
+      h.push(`<p class="small">η vol = Q_out / Q_th of the chamber network: it includes internal leakage, fluid compressibility and incomplete filling, not leakage alone.</p>`);
+      if (anyTol) {
+        const t = (opts.caseResults.find(r => r.tol) || {}).tol;
+        const ax = t ? Object.entries(t.axes).map(([k, a]) => `${esc(k)} ${a.min}…${a.max} mm (${a.method === 'grid' ? a.levels.length + '-point grid' : 'band ends'})`).join('; ') : '';
+        h.push(`<p class="small">Tolerance intervals: ${ax}. Monotone clearances are evaluated at their band ends (exact for a monotone model); the tip clearance c is not monotone for η hm and is evaluated on a grid with parabolic refinement. η is the enclosure [min η vol · min η hm, max η vol · max η hm]. Method and evidence: docs/tolerance.md.</p>`);
+      }
     }
     // checks
     h.push(`<h2>${sec++} Checks, warnings and errors</h2>`);
